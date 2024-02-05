@@ -9,6 +9,8 @@ use router::{self , ContractState};
 
 #[program]
 mod position_router {
+    use std::sync::mpsc::Receiver;
+
     use super::*;
 
     // Constructor equivalent in Anchor
@@ -158,7 +160,6 @@ mod position_router {
         let user = ctx.accounts.user.clone();
         let signer= ctx.accounts.signer.clone();
         let clock: Clock = Clock::get().unwrap();
-        let clock2: Clock = Clock::get()?;
         let state =&mut ctx.accounts.state;
         if let Some(position) = state.open_liquidity_position_requests.get(index) {
             // Now you can directly access fields of `position`
@@ -176,10 +177,11 @@ mod position_router {
             authorized_account : user.clone(),
             user : user.clone()
         };
-        let position = state.open_liquidity_position_requests.get(index).unwrap();
+        let position = state.close_liquidity_position_requests.get(index).unwrap();
         let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-    
-        router::cpi::plugin_open_liquidity_position(cpi_ctx , signer.key() , position.margin , position.liquidity , position.pool );
+
+        let receiver : Pubkey = Pubkey::default();
+        router::cpi::plugin_close_liquidity_position(cpi_ctx ,  position.positionID , receiver, position.pool );
         state.open_liquidity_position_requests.remove(index.try_into().unwrap());
         emit!(OpenLiquidityPositionExecuted{index : index as u128 , 
             reciever : execution_fee_receiver});
@@ -253,6 +255,8 @@ mod position_router {
         // usdc transfer 
         // external call to plugin 
         // transfer out eth 
+        let user = ctx.accounts.user.clone();
+        let signer= ctx.accounts.signer.clone();
         let clock: Clock = Clock::get().unwrap();
         let state =&mut ctx.accounts.state;
         if let Some(position) = state.close_liquidity_position_requests.get(index) {
@@ -265,6 +269,16 @@ mod position_router {
             // Handle the case where there is no position at the index
             msg!("Position at index {} does not exist.", index);
         }
+        let cpi_program = ctx.accounts.router_program.to_account_info();
+        let cpi_accounts = LiquidityPosition{
+            state : ctx.accounts.router_program.to_account_info(),
+            authorized_account : user.clone(),
+            user : user.clone()
+        };
+        let position = state.open_liquidity_position_requests.get(index).unwrap();
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+    
+        router::cpi::plugin_open_liquidity_position(cpi_ctx , signer.key() , position.margin , position.liquidity , position.pool );
         state.close_liquidity_position_requests.remove(index.try_into().unwrap());
         
         Ok(true)
@@ -280,10 +294,27 @@ mod position_router {
             // Logic to create open liquidity position
         // msg.value check 
         // external call to router 
+
         let value = 100;
         let state =&mut ctx.accounts.state;
+        let user = ctx.accounts.user.clone();
+        let signer= ctx.accounts.signer.clone();
         let clock: Clock = Clock::get().unwrap();
         let clock2: Clock = Clock::get()?;
+
+        if margin_delta > 0 {
+            let user = ctx.accounts.user.clone();
+            let signer= ctx.accounts.signer.clone();
+            let cpi_program = ctx.accounts.router_program.to_account_info();
+            let cpi_accounts = PluginTransfer{
+                state : ctx.accounts.router_program.to_account_info(),
+                authorized_account : user.clone(),
+                user : user.clone()
+            };
+            let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+            let to:Pubkey = Pubkey::default(); // add the program pubkey here when you will be deploying this program  
+            router::cpi::plugin_transfer(cpi_ctx , margin_delta , signer.key() ,to  );
+        }
         let position = AdjustLiquidityPositionMarginRequest {
            account :  ctx.accounts.user.key(),
             pool : pool,
@@ -343,6 +374,8 @@ mod position_router {
         // usdc transfer 
         // external call to plugin 
         // transfer out eth 
+        let user = ctx.accounts.user.clone();
+        let signer= ctx.accounts.signer.clone();
         let clock: Clock = Clock::get().unwrap();
         let state =&mut ctx.accounts.state;
         if let Some(position) = state.adjust_liquidity_position_margin_requests.get(index) {
@@ -365,6 +398,17 @@ mod position_router {
             // Handle the case where there is no position at the index
             msg!("Position at index {} does not exist.", index);
         }
+        let cpi_program = ctx.accounts.router_program.to_account_info();
+        let cpi_accounts = LiquidityPosition{
+            state : ctx.accounts.router_program.to_account_info(),
+            authorized_account : user.clone(),
+            user : user.clone()
+        };
+        let position = state.adjust_liquidity_position_margin_requests.get(index).unwrap();
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+
+        let receiver : Pubkey = Pubkey::default();
+        router::cpi::plugin_adjust_liquidity_position_margin(cpi_ctx , position.pool,  position.positionID , position.margin_delta, receiver );
         state.adjust_liquidity_position_margin_requests.remove(index.try_into().unwrap());
         
         Ok(true)
@@ -374,12 +418,26 @@ mod position_router {
         ctx: Context<CreateOpenLiquidityPosition>,
         pool: Pubkey, 
         liquidity_delta: u128,
+        value : u128 , 
     ) -> Result<u128> {
   // Logic to create open liquidity position
         // msg.value check 
-        // external call to router 
+        // external call to router
+        
         let value = 100;
         let state =&mut ctx.accounts.state;
+        require!(state.min_execution_fee > value , Errors::InsufficientExecutionFee);
+        let user = ctx.accounts.user.clone();
+        let signer= ctx.accounts.signer.clone();
+        let cpi_program = ctx.accounts.router_program.to_account_info();
+        let cpi_accounts = PluginTransfer{
+            state : ctx.accounts.router_program.to_account_info(),
+            authorized_account : user.clone(),
+            user : user.clone()
+        };
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        let to:Pubkey = Pubkey::default(); // add the program pubkey here when you will be deploying this program  
+        router::cpi::plugin_transfer(cpi_ctx , liquidity_delta , signer.key() ,to  );
         let clock: Clock = Clock::get().unwrap();
         let clock2: Clock = Clock::get()?;
         let position = IncreaseRiskBufferFundPositionRequest {
@@ -924,6 +982,7 @@ pub struct CreateOpenLiquidityPosition<'info> {
     /// CHECK
     #[account(signer)]
     pub signer: Signer<'info>,
+      /// CHECK
     pub user: AccountInfo<'info>,
     pub router_program: Program<'info , Router>,
 

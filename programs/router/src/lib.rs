@@ -86,7 +86,7 @@ mod router {
         Ok(100)
     }
 
-    pub fn plugin_close_liquidity_position(ctx: Context<LiquidityPosition>,  _positionID:u128 ,  _receiver:Pubkey ) -> Result<()> {
+    pub fn plugin_close_liquidity_position(ctx: Context<LiquidityPosition>,  _positionID:u128 ,  _receiver:Pubkey , pool :Pubkey ) -> Result<()> {
         let address_list = &mut ctx.accounts.state.executors;
         let user_pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);   
