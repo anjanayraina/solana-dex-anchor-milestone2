@@ -61,7 +61,7 @@ mod router {
             Ok(())
         }
 
-    pub fn plugin_transfer(ctx: Context<PluginTransfer>, amount: u64, from: Pubkey, to: Pubkey) -> Result<()> {
+    pub fn plugin_transfer(ctx: Context<PluginTransfer>, amount: u128, from: Pubkey, to: Pubkey) -> Result<()> {
         let address_list = &mut ctx.accounts.state.executors;
         let user_pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
@@ -69,7 +69,7 @@ mod router {
         Ok(())
     }
 
-    pub fn plugin_transfer_nft(ctx: Context<PluginTransferNFT>, from: Pubkey , to:Pubkey , tokenID:u64) -> Result<()> {
+    pub fn plugin_transfer_nft(ctx: Context<PluginTransferNFT>, from: Pubkey , to:Pubkey , tokenID:u128) -> Result<()> {
         let address_list = &mut ctx.accounts.state.executors;
         let user_pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
@@ -78,7 +78,7 @@ mod router {
         Ok(())
     }
 
-    pub fn plugin_open_liquidity_position(ctx: Context<LiquidityPosition>, account: Pubkey, margin:u64, liquidity:u64) -> Result<u64> {
+    pub fn plugin_open_liquidity_position(ctx: Context<LiquidityPosition>, account: Pubkey, margin:u128, liquidity:u128 , pool : Pubkey ) -> Result<u128> {
         let address_list = &mut ctx.accounts.state.executors;
         let user_pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized); 
@@ -86,7 +86,7 @@ mod router {
         Ok(100)
     }
 
-    pub fn plugin_close_liquidity_position(ctx: Context<LiquidityPosition>,  _positionID:u64 ,  _receiver:Pubkey ) -> Result<()> {
+    pub fn plugin_close_liquidity_position(ctx: Context<LiquidityPosition>,  _positionID:u128 ,  _receiver:Pubkey ) -> Result<()> {
         let address_list = &mut ctx.accounts.state.executors;
         let user_pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);   
@@ -95,13 +95,13 @@ mod router {
     }
 
     pub fn plugin_adjust_liquidity_position_margin(ctx: Context<LiquidityPosition>, _pool:Pubkey,
-        _positionID:u64,
-        _marginDelta:u64,
+        _positionID:u128,
+        _marginDelta:u128,
         _receiver:Pubkey) -> Result<()> {
             let address_list = &mut ctx.accounts.state.executors;
             let user_pubkey = ctx.accounts.user.key();
             require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
-        // return a u64 value
+        // return a u128 value
       Ok(())
     }
 
@@ -110,7 +110,7 @@ mod router {
       pub fn plugin_increase_risk_buffer_fund_position(
         ctx: Context<RiskBufferFundPosition>, 
         account: Pubkey, 
-        liquidity_delta: u64
+        liquidity_delta: u128
     ) -> Result<()> {
         let address_list = &mut ctx.accounts.state.executors;
         let user_pubkey = ctx.accounts.user.key();
@@ -123,7 +123,7 @@ mod router {
     pub fn plugin_decrease_risk_buffer_fund_position(
         ctx: Context<RiskBufferFundPosition>, 
         account: Pubkey, 
-        liquidity_delta: u64, 
+        liquidity_delta: u128, 
         receiver: Pubkey
     ) -> Result<()> {
         let address_list = &mut ctx.accounts.state.executors;
@@ -137,9 +137,9 @@ mod router {
         ctx: Context<PositionManagement>, 
         account: Pubkey, 
         side: bool, 
-        margin_delta: u64, 
-        size_delta: u64
-    ) -> Result<u64> {
+        margin_delta: u128, 
+        size_delta: u128
+    ) -> Result<u128> {
         // TODO: Implement access control, position increase logic
         let address_list = &mut ctx.accounts.state.executors;
         let user_pubkey = ctx.accounts.user.key();
@@ -152,10 +152,10 @@ mod router {
         ctx: Context<PositionManagement>, 
         account: Pubkey, 
         side: bool, 
-        margin_delta: u64, 
-        size_delta: u64, 
+        margin_delta: u128, 
+        size_delta: u128, 
         receiver: Pubkey
-    ) -> Result<u64> {
+    ) -> Result<u128> {
         // TODO: Implement access control, position decrease logic
         let address_list = &mut ctx.accounts.state.executors;
         let user_pubkey = ctx.accounts.user.key();
@@ -168,7 +168,7 @@ mod router {
         ctx: Context<PositionManagement>, 
         _pool: Pubkey, 
         side: bool, 
-        size_delta: u64, 
+        size_delta: u128, 
         receiver: Pubkey
     ) -> Result<()> {
         // TODO: Implement access control for liquidator, position closing logic
@@ -183,7 +183,7 @@ mod router {
     pub fn plugin_collect_referral_fee(
             ctx: Context<PositionManagement>, 
             pool: Pubkey, 
-            referral_token: u64, 
+            referral_token: u128, 
             receiver: Pubkey
         ) -> Result<()> {
             // TODO: Implement access control for liquidator, position closing logic
@@ -311,7 +311,7 @@ pub struct Pool {
 #[account]
 #[derive(Default)]
 pub struct MyAccount {
-    data: u64
+    data: u128
 }
 
 

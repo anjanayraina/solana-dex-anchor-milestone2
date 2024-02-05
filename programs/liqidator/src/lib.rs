@@ -9,6 +9,8 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnR");
 const GOVERNOR_PUBKEY: Pubkey = Pubkey::new_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
 #[program]
 pub mod liquidator {
+    use std::{default, sync::mpsc::Receiver};
+
     use super::*;
 
      
@@ -62,7 +64,7 @@ pub mod liquidator {
     }
 
     // Function to liquidate position
-    pub fn liquidate_position(ctx: Context<LiquidatePosition>, token : Pubkey , account : Pubkey , side : bool , _fee_reciever : Pubkey  , pool : Pubkey , receiver : Pubkey) -> Result<()> {
+    pub fn liquidate_position(ctx: Context<LiquidatePosition>, token : Pubkey , account : Pubkey , side : bool , _fee_reciever : Pubkey  , pool : Pubkey ) -> Result<()> {
         // Logic to liquidate position
         let addresses = ctx.accounts.authorized_account.clone();
         
@@ -84,6 +86,7 @@ pub mod liquidator {
             authorized_account : addresses,
             user : ctx.accounts.router_program.to_account_info()
         };
+        let receiver : Pubkey = Pubkey::default(); // change this to the program Pubkey that  you set in the end 
         let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
         router::cpi::plugin_close_position_by_liquidator(cpi_ctx , pool ,  side , size , receiver);
         // external call to pool 

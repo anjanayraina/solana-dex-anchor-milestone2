@@ -2,6 +2,10 @@ use anchor_lang::prelude::*;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnT");
 const GOVERNOR_PUBKEY: Pubkey = Pubkey::new_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
+use router::cpi::accounts::PluginTransfer;
+use router::cpi::accounts::LiquidityPosition;
+use router::program::Router;
+use router::{self , ContractState};
 
 #[program]
 mod position_router {
@@ -80,7 +84,19 @@ mod position_router {
         // external call to router 
 
         let state =&mut ctx.accounts.state;
+        
         require!(state.min_execution_fee > value , Errors::InsufficientExecutionFee);
+        let user = ctx.accounts.user.clone();
+        let signer= ctx.accounts.signer.clone();
+        let cpi_program = ctx.accounts.router_program.to_account_info();
+        let cpi_accounts = PluginTransfer{
+            state : ctx.accounts.router_program.to_account_info(),
+            authorized_account : user.clone(),
+            user : user.clone()
+        };
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        let to:Pubkey = Pubkey::default(); // add the program pubkey here when you will be deploying this program  
+        router::cpi::plugin_transfer(cpi_ctx , margin , signer.key() ,to  );
         let clock: Clock = Clock::get().unwrap();
         let clock2: Clock = Clock::get()?;
         let position = OpenLiquidityPositionRequest {
@@ -139,11 +155,11 @@ mod position_router {
         // usdc transfer 
         // external call to plugin 
         // transfer out eth 
-        let state =&mut ctx.accounts.state;
+        let user = ctx.accounts.user.clone();
+        let signer= ctx.accounts.signer.clone();
         let clock: Clock = Clock::get().unwrap();
         let clock2: Clock = Clock::get()?;
         let state =&mut ctx.accounts.state;
-        let position = state.open_liquidity_position_requests.get(index);
         if let Some(position) = state.open_liquidity_position_requests.get(index) {
             // Now you can directly access fields of `position`
             let should_cancel = _should_cancel(position.blockNumber, position.blockTime, position.account, clock.unix_timestamp as u128, state.min_block_delayer_executor, ctx.accounts.user.key())?;
@@ -154,6 +170,16 @@ mod position_router {
             // Handle the case where there is no position at the index
             msg!("Position at index {} does not exist.", index);
         }
+        let cpi_program = ctx.accounts.router_program.to_account_info();
+        let cpi_accounts = LiquidityPosition{
+            state : ctx.accounts.router_program.to_account_info(),
+            authorized_account : user.clone(),
+            user : user.clone()
+        };
+        let position = state.open_liquidity_position_requests.get(index).unwrap();
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+    
+        router::cpi::plugin_open_liquidity_position(cpi_ctx , signer.key() , position.margin , position.liquidity , position.pool );
         state.open_liquidity_position_requests.remove(index.try_into().unwrap());
         emit!(OpenLiquidityPositionExecuted{index : index as u128 , 
             reciever : execution_fee_receiver});
@@ -722,7 +748,7 @@ pub fn _should_cancel(block_number : u128 , position_block_time : u128, account 
 }
 
 #[account]
-pub struct ContractState {
+pub struct State {
     usd : Pubkey,
     router : Pubkey ,
     min_execution_fee :u128,
@@ -829,7 +855,7 @@ pub struct DecreasePositionRequest{
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     /// CHECK
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -838,7 +864,7 @@ pub struct Initialize<'info> {
 #[derive(Accounts)]
 pub struct UpdateExecutor<'info> {
     /// CHECK
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -849,7 +875,7 @@ pub struct UpdateExecutor<'info> {
 pub struct UpdatePositionExecutor<'info> {
     /// CHECK
     #[account(mut)]
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
     // Include other accounts as needed, such as the signer to authorize the update
     /// CHECK
     #[account(signer)]
@@ -867,7 +893,7 @@ pub struct IncreasePositionRequestContext<'info> {
     // Fields from your Solidity struct...
     /// CHECK
     #[account(mut)]
-    pub position_router_state: Account<'info, ContractState>,
+    pub position_router_state: Account<'info, State>,
     // Include other accounts as needed, such as the signer to authorize the update
     /// CHECK
     #[account(signer)]
@@ -880,7 +906,7 @@ pub struct DecreasePositionRequestContext<'info> {
     /// CHECK
     // Fields from your Solidity struct...
     #[account(mut)]
-    pub position_router_state: Account<'info, ContractState>,
+    pub position_router_state: Account<'info, State>,
     // Include other accounts as needed, such as the signer to authorize the update
     /// CHECK
     #[account(signer)]
@@ -892,11 +918,15 @@ pub struct CreateOpenLiquidityPosition<'info> {
     /// CHECK
     // Fields from your Solidity struct...
     #[account(mut)]
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
+    
     // Include other accounts as needed, such as the signer to authorize the update
     /// CHECK
     #[account(signer)]
+    pub signer: Signer<'info>,
     pub user: AccountInfo<'info>,
+    pub router_program: Program<'info , Router>,
+
 }
 
 #[derive(Accounts)]
@@ -904,7 +934,7 @@ pub struct UpdateDelayValues<'info> {
     /// CHECK
     // Fields from your Solidity struct...
     #[account(mut)]
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
     // Include other accounts as needed, such as the signer to authorize the update
     /// CHECK
     #[account(signer)]
@@ -916,7 +946,7 @@ pub struct UpdateMinExecutionFee<'info> {
     /// CHECK
     // Fields from your Solidity struct...
     #[account(mut)]
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
     // Include other accounts as needed, such as the signer to authorize the update
     /// CHECK
     #[account(signer)]
@@ -928,7 +958,7 @@ pub struct UpdateExecutionGasLimit<'info> {
     /// CHECK
     // Fields from your Solidity struct...
     #[account(mut)]
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
     // Include other accounts as needed, such as the signer to authorize the update
     /// CHECK
     #[account(signer)]
