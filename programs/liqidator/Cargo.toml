@@ -17,3 +17,8 @@ default = []
 
 [dependencies]
 anchor-lang = "0.29.0"
+router = { path = "../router", features = ["cpi"]}
+
+
+[programs.localnet]
+router = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"

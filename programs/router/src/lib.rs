@@ -174,7 +174,8 @@ mod router {
         // TODO: Implement access control for liquidator, position closing logic
         let address_list = &mut ctx.accounts.state.executors;
         let user_pubkey = ctx.accounts.user.key();
-        require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized); 
+        require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
+        
         Ok(())
     }
 
@@ -265,12 +266,22 @@ pub struct RiskBufferFundPosition<'info>  {
 pub struct PositionManagement<'info>  {
      // Adjust space as needed
     /// CHECK
-    #[account(signer)]
+    
+    pub authorized_account: AccountInfo<'info>,
+    pub state: Account<'info, ContractState>,
+    pub user: Signer<'info>,
+
+}
+
+#[derive(Accounts)]
+pub struct SetDataContext<'info>  {
+     // Adjust space as needed
+    /// CHECK
+    #[account(mut)]
     pub authorized_account: AccountInfo<'info>,
     pub state: Account<'info, ContractState>,
     pub user: Signer<'info>,
 }
-
 #[derive(Accounts)]
 pub struct ReferralManagement<'info> {
      // Adjust space as needed

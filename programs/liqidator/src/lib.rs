@@ -2,14 +2,16 @@ use anchor_lang::prelude::*;
 use anchor_lang::InstructionData;
 use anchor_lang::solana_program;
 use anchor_lang::solana_program::program::invoke;
-
+use router::cpi::accounts::PositionManagement;
+use router::program::Router;
+use router::{self , ContractState};
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnR");
 const GOVERNOR_PUBKEY: Pubkey = Pubkey::new_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
 #[program]
 pub mod liquidator {
     use super::*;
 
-    // Initialization function equivalent in Anchor
+     
     pub fn initialize(ctx: Context<Initialize> , _router : Pubkey , _pool_factory : Pubkey , _efc:Pubkey) -> Result<()> {
         require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::CallerUnauthorized);
         let state =&mut ctx.accounts.state;
@@ -60,11 +62,14 @@ pub mod liquidator {
     }
 
     // Function to liquidate position
-    pub fn liquidate_position(ctx: Context<LiquidatePosition>, token : Pubkey , account : Pubkey , side : bool , _fee_reciever : Pubkey ) -> Result<()> {
+    pub fn liquidate_position(ctx: Context<LiquidatePosition>, token : Pubkey , account : Pubkey , side : bool , _fee_reciever : Pubkey  , pool : Pubkey , receiver : Pubkey) -> Result<()> {
         // Logic to liquidate position
-        let address_list = &mut ctx.accounts.state.executors;
-        let user_pubkey = ctx.accounts.user.key();
-        require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
+        let addresses = ctx.accounts.authorized_account.clone();
+        
+        let user_pubkey = &ctx.accounts.user;
+        let address_list = &ctx.accounts.state.executors;
+        
+        require!(address_list.contains(&user_pubkey.key()) , MyError::CallerUnauthorized);
         // let decrease_index_price = _choose_index_price(ctx ,token , size)?;
         let decrease_index_price=0;
         let _has_unrealized_profit:bool = false;
@@ -73,6 +78,16 @@ pub mod liquidator {
             // liquidate position 
            return Ok(())
         }
+        let cpi_program = ctx.accounts.router_program.to_account_info();
+        let cpi_accounts = PositionManagement{
+            state : ctx.accounts.router_program.to_account_info(),
+            authorized_account : addresses,
+            user : ctx.accounts.router_program.to_account_info()
+        };
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        router::cpi::plugin_close_position_by_liquidator(cpi_ctx , pool ,  side , size , receiver);
+        // external call to pool 
+
 
         Ok(())
     }
@@ -113,7 +128,7 @@ pub mod liquidator {
 
 // Contract state to hold the list of authorized addresses
 #[account]
-pub struct ContractState {
+pub struct State {
     pub executors: Vec<Pubkey>,
     router : Pubkey,
     pool_factory : Pubkey,
@@ -135,7 +150,7 @@ pub struct GovernanceAction<'info> {
     pub authorized_account: AccountInfo<'info>,
     // The governance state account.
     #[account(mut)]
-    pub governance_state: Account<'info, ContractState>,
+    pub governance_state: Account<'info, State>,
     pub user: Signer<'info>,
 }
 
@@ -147,7 +162,7 @@ pub struct Initialize<'info> {
     /// CHECK
     #[account(signer)]
     pub authorized_account: AccountInfo<'info>,
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
     pub user: Signer<'info>,
 
 }
@@ -159,7 +174,7 @@ pub struct UpdatePriceFeed<'info> {
     /// CHECK
     #[account(signer)]
     pub authorized_account: AccountInfo<'info>,
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
     pub user: Signer<'info>,
 }
 
@@ -169,7 +184,7 @@ pub struct UpdateExecutor<'info> {
     /// CHECK
     #[account(signer)]
     pub authorized_account: AccountInfo<'info>,
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
     pub user: Signer<'info>,
 }
 
@@ -179,7 +194,7 @@ pub struct LiquidateLiquidityPosition<'info> {
         /// CHECK
     #[account(signer)]
     pub authorized_account: AccountInfo<'info>,
-    pub state: Account<'info, ContractState>,
+    pub state: Account<'info, State>,
     pub user: Signer<'info>,
 }
 
@@ -187,10 +202,18 @@ pub struct LiquidateLiquidityPosition<'info> {
 #[derive(Accounts)]
 pub struct LiquidatePosition<'info> {
         /// CHECK
-        #[account(signer)]
+        
         pub authorized_account: AccountInfo<'info>,
-        pub state: Account<'info, ContractState>,
+
+        pub state: Account<'info, State>,
         pub user: Signer<'info>,
+        pub router_program: Program<'info, Router>,
+}
+
+#[derive(Accounts)]
+pub struct ClosePositionByLiquidatorCpiContext<'info> {
+    
+    pub router_program: Program<'info, Router>,
 }
 
 
