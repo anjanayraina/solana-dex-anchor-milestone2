@@ -109,6 +109,7 @@ mod router {
       // Increase the liquidity of a risk buffer fund position
       pub fn plugin_increase_risk_buffer_fund_position(
         ctx: Context<RiskBufferFundPosition>, 
+        pool : Pubkey , 
         account: Pubkey, 
         liquidity_delta: u128
     ) -> Result<()> {
@@ -122,6 +123,7 @@ mod router {
     // Decrease the liquidity of a risk buffer fund position
     pub fn plugin_decrease_risk_buffer_fund_position(
         ctx: Context<RiskBufferFundPosition>, 
+        pool : Pubkey , 
         account: Pubkey, 
         liquidity_delta: u128, 
         receiver: Pubkey
