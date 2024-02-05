@@ -69,14 +69,14 @@ pub mod order_book {
         }
 
         let new_order = IncreaseOrder {
-            account: ctx.accounts.authorized_account.key(), // Replace with your actual account
-            pool: ctx.accounts.state.pool, // Replace with your actual pool
-            side: side, // Replace with your actual side
-            marginDelta: 0, // Replace with your actual margin delta
-            sizeDelta: 0, // Replace with your actual size delta
-            triggerMarketPriceX96: 0, // Replace with your actual trigger market price X96
-            triggerAbove: true, // Replace with your actual trigger above
-            acceptableTradePriceX96: 0, // Replace with your actual acceptable trade price X96
+            account: ctx.accounts.authorized_account.key(), 
+            pool: ctx.accounts.state.pool, 
+            side: side, 
+            marginDelta: margin_delta, 
+            sizeDelta: sizeDelta, 
+            triggerMarketPriceX96: trigger_marketPriceX96, 
+            triggerAbove: trigger_above,
+            acceptableTradePriceX96: acceptable_trade_price,
             executionFee: 0, // Replace with your actual execution fee
         };
 
@@ -103,14 +103,14 @@ pub mod order_book {
         }
 
         let new_order = DecreaseOrder {
-            account: ctx.accounts.authorized_account.key(), // Replace with your actual account
-            pool: ctx.accounts.state.pool, // Replace with your actual pool
-            side: true, // Replace with your actual side
-            marginDelta: 0, // Replace with your actual margin delta
-            sizeDelta: 0, // Replace with your actual size delta
-            triggerMarketPriceX96: 0, // Replace with your actual trigger market price X96
-            triggerAbove: trigger_above, // Replace with your actual trigger above
-            acceptableTradePriceX96: 0, // Replace with your actual acceptable trade price X96
+            account: ctx.accounts.authorized_account.key(), 
+            pool: ctx.accounts.state.pool, 
+            side: side, 
+            marginDelta: margin_delta, 
+            sizeDelta: sizeDelta, 
+            triggerMarketPriceX96: trigger_marketPriceX96, 
+            triggerAbove: trigger_above, 
+            acceptableTradePriceX96: acceptable_trade_price,
             executionFee: 0, // Replace with your actual execution fee
             receiver : receiver
         };
@@ -126,9 +126,9 @@ pub mod order_book {
     }
 
     pub fn update_decrease_order(ctx: Context<CreateDecreaseOrder>, order_index: u128, trigger_market_price: u128, acceptable_trade_price: u128) -> Result<()> {
-        let state = &mut ctx.accounts.state;
-        let index_usize = order_index as usize;
-        let order = &mut state.all_decrease_orders[index_usize];
+        let state: &mut Account<'_, ContractState> = &mut ctx.accounts.state;
+        let index_usize: usize = order_index as usize;
+        let order: &mut DecreaseOrder = &mut state.all_decrease_orders[index_usize];
         require!(order.account == ctx.accounts.authorized_account.key(), MyError::CallerUnauthorized);
         order.triggerMarketPriceX96 = trigger_market_price;
         order.acceptableTradePriceX96 = acceptable_trade_price;
@@ -143,9 +143,9 @@ pub mod order_book {
     
 
     pub fn update_increase_order(ctx: Context<CreateIncreaseOrder> , order_index :u128 , trigger_market_price : u128 , acceptable_trade_price: u128) -> Result<()> {
-        let state = &mut ctx.accounts.state;
-        let index_usize = order_index as usize;
-        let order = &mut state.all_increase_orders[index_usize];
+        let state: &mut Account<'_, ContractState> = &mut ctx.accounts.state;
+        let index_usize: usize = order_index as usize;
+        let order: &mut IncreaseOrder = &mut state.all_increase_orders[index_usize];
         require!(order.account == ctx.accounts.authorized_account.key(), MyError::CallerUnauthorized);
         order.triggerMarketPriceX96 = trigger_market_price;
         order.acceptableTradePriceX96 = acceptable_trade_price;
@@ -159,9 +159,9 @@ pub mod order_book {
     }
 
     pub fn cancel_increase_order(ctx: Context<CreateIncreaseOrder> , order_index :u128 , fee_reciever: Pubkey ) -> Result<()> {
-        let state = &mut ctx.accounts.state;
-        let index_usize = order_index as usize;
-        let order = &mut state.all_increase_orders[index_usize];
+        let state: &mut Account<'_, ContractState> = &mut ctx.accounts.state;
+        let index_usize: usize = order_index as usize;
+        let order: &mut IncreaseOrder = &mut state.all_increase_orders[index_usize];
         require!(order.account == ctx.accounts.authorized_account.key(), MyError::CallerUnauthorized);
         require!(order.account!=Pubkey::default() , MyError::InvalidOperation);
         // token tranfer 
@@ -175,9 +175,9 @@ pub mod order_book {
     }
 
     pub fn execute_increase_order(ctx: Context<CreateIncreaseOrder> , order_index :u128 , fee_reciever: Pubkey ) -> Result<()> {
-        let state = &mut ctx.accounts.state;
-        let index_usize = order_index as usize;
-        let order = &mut state.all_increase_orders[index_usize];
+        let state: &mut Account<'_, ContractState> = &mut ctx.accounts.state;
+        let index_usize: usize = order_index as usize;
+        let order: &mut IncreaseOrder = &mut state.all_increase_orders[index_usize];
         // external call to pool required here 
         let market_price = 100;
         _validate_trade_price_X96(order.side , market_price , order.triggerMarketPriceX96);
@@ -194,9 +194,9 @@ pub mod order_book {
     }
 
     pub fn cancel_decrease_order(ctx: Context<CreateIncreaseOrder> , order_index :u128 , fee_reciever: Pubkey ) -> Result<()> {
-        let state = &mut ctx.accounts.state;
-        let index_usize = order_index as usize;
-        let order = &mut state.all_decrease_orders[index_usize];
+        let state: &mut Account<'_, ContractState> = &mut ctx.accounts.state;
+        let index_usize: usize = order_index as usize;
+        let order: &mut DecreaseOrder = &mut state.all_decrease_orders[index_usize];
         require!(order.account == ctx.accounts.authorized_account.key(), MyError::CallerUnauthorized);
         //  sol tranfer out 
         state.all_decrease_orders.remove(index_usize);
@@ -245,10 +245,60 @@ pub mod order_book {
         trigger_market_price: [u128; 2],
         acceptable_trade_price: [u128; 2],
         receiver: Pubkey,
+        value : u128 , 
     ) -> Result<()>  {
-        // Function body goes here
-        // add create decrease order
-        Ok(())
+        let fee0: u128  = value/2;
+        let state = &mut ctx.accounts.state;
+        if(fee0 < state.min_execution_fee){
+            return err!(MyError::InsufficientExecutionFee);
+        }
+
+        let new_order = DecreaseOrder {
+            account: ctx.accounts.authorized_account.key(), 
+            pool: ctx.accounts.state.pool, 
+            side: side, 
+            marginDelta: margin_deltas[0], 
+            sizeDelta: size_deltas[0], 
+            triggerMarketPriceX96: trigger_market_price[0], 
+            triggerAbove: side, 
+            acceptableTradePriceX96: acceptable_trade_price[0],
+            executionFee: fee0, // Replace with your actual execution fee
+            receiver : receiver
+        };
+
+        ctx.accounts.state.all_decrease_orders.push(new_order);
+        emit!(CreateDecreaseOrderEvent{
+            side: side, 
+            margin_delta: margin_deltas[0], 
+            sizeDelta: size_deltas[0], 
+            trigger_marketPriceX96: trigger_market_price[0], 
+            trigger_above: side, 
+            acceptable_trade_price: acceptable_trade_price[0],
+            });
+
+            let new_order = DecreaseOrder {
+                account: ctx.accounts.authorized_account.key(), 
+                pool: ctx.accounts.state.pool, 
+                side: !side, 
+                marginDelta: margin_deltas[1], 
+                sizeDelta: size_deltas[1], 
+                triggerMarketPriceX96: trigger_market_price[1], 
+                triggerAbove: !side, 
+                acceptableTradePriceX96: acceptable_trade_price[1],
+                executionFee: value - fee0, // Replace with your actual execution fee
+                receiver : receiver
+            };
+    
+            ctx.accounts.state.all_decrease_orders.push(new_order);
+            emit!(CreateDecreaseOrderEvent{
+                side: !side, 
+                margin_delta: margin_deltas[1], 
+                sizeDelta: size_deltas[1], 
+                trigger_marketPriceX96: trigger_market_price[1], 
+                trigger_above: !side, 
+                acceptable_trade_price: acceptable_trade_price[1],
+                });
+    Ok(())
     }
 
 
@@ -391,6 +441,8 @@ pub enum MyError {
     InvalidOperation,
     #[msg("Program Already initilized")]
     AlreadyInitlized,
+    #[msg("Insufficient Fee")]
+    InsufficientExecutionFee
 
 }
 

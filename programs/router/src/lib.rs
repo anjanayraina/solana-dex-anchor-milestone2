@@ -55,15 +55,15 @@ mod router {
         // Function to update executor
     pub fn remove_liquidator(ctx: Context<UpdateExecutor>, liquidator_address: Pubkey) -> Result<()> {
             require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::CallerUnauthorized);
-            let address_list = &mut ctx.accounts.state.liquidators;
+            let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.liquidators;
             address_list.retain(|&x| x != liquidator_address);
             // Logic to update executor
             Ok(())
         }
 
     pub fn plugin_transfer(ctx: Context<PluginTransfer>, amount: u128, from: Pubkey, to: Pubkey) -> Result<()> {
-        let address_list = &mut ctx.accounts.state.executors;
-        let user_pubkey = ctx.accounts.user.key();
+        let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+        let user_pubkey: Pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
         // token transfer logic
         Ok(())

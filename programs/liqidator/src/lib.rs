@@ -66,7 +66,7 @@ pub mod liquidator {
     // Function to liquidate position
     pub fn liquidate_position(ctx: Context<LiquidatePosition>, token : Pubkey , account : Pubkey , side : bool , _fee_reciever : Pubkey  , pool : Pubkey ) -> Result<()> {
         // Logic to liquidate position
-        let addresses = ctx.accounts.authorized_account.clone();
+        let addresses: AccountInfo<'_> = ctx.accounts.authorized_account.clone();
         
         let user_pubkey = &ctx.accounts.user;
         let address_list = &ctx.accounts.state.executors;
