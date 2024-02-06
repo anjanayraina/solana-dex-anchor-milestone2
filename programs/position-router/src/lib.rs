@@ -5,6 +5,7 @@ const GOVERNOR_PUBKEY: Pubkey = Pubkey::new_from_array([1, 2, 3, 4, 5, 6, 7, 8, 
 use router::cpi::accounts::PluginTransfer;
 use router::cpi::accounts::LiquidityPosition;
 use router::cpi::accounts::RiskBufferFundPosition;
+use router::cpi::accounts::PositionManagement;
 use router::program::Router;
 use router::{self , ContractState};
 
@@ -692,6 +693,8 @@ mod position_router {
     ) -> Result<bool> {
         let clock: Clock = Clock::get().unwrap();
         let state: &mut Account<'_, State> =&mut ctx.accounts.state;
+        let user: AccountInfo<'_> = ctx.accounts.user.clone();
+
         
         if let Some(position) = state.increase_position_request.get(index) {
   
@@ -710,6 +713,19 @@ mod position_router {
         } else {
             msg!("Position at index {} does not exist.", index);
         }
+        let cpi_program: AccountInfo<'_> = ctx.accounts.router_program.to_account_info();
+        let cpi_accounts = PositionManagement{
+            state : ctx.accounts.router_program.to_account_info(),
+            authorized_account : user.clone(),
+            user : user.clone()
+        };
+        let cpi_ctx: CpiContext<'_, '_, '_, '_, PositionManagement<'_>> = CpiContext::new(cpi_program, cpi_accounts);
+
+        let receiver : Pubkey = Pubkey::default();
+        let position: &mut &IncreasePositionRequest = &mut state.increase_position_request.get(index).unwrap();
+
+        router::cpi::plugin_increase_position(cpi_ctx ,  position.account, position.side , position.marginDelta , position.sizeDelta );
+        
         state.increase_position_request.remove(index.try_into().unwrap());
         Ok(true) // Placeholder for the cancellation success status
     }
@@ -783,6 +799,8 @@ mod position_router {
     pub fn execute_decrease_position(ctx: Context<CreateOpenLiquidityPosition>, index: usize, execution_fee_receiver: Pubkey) -> Result<bool> {
         let clock: Clock = Clock::get().unwrap();
         let state: &mut Account<'_, State> =&mut ctx.accounts.state;
+        let user: AccountInfo<'_> = ctx.accounts.user.clone();
+
         if let Some(position) = state.decrease_position_request.get(index) {
   
             let should_cancel: bool = _should_cancel(position.blockNumber, position.blockTime, position.account, clock.unix_timestamp as u128, state.min_block_delayer_executor, ctx.accounts.user.key())?;
@@ -805,6 +823,20 @@ mod position_router {
         } else {
             msg!("Position at index {} does not exist.", index);
         }
+
+        let cpi_program: AccountInfo<'_> = ctx.accounts.router_program.to_account_info();
+        let cpi_accounts = PositionManagement{
+            state : ctx.accounts.router_program.to_account_info(),
+            authorized_account : user.clone(),
+            user : user.clone()
+        };
+        let cpi_ctx: CpiContext<'_, '_, '_, '_, PositionManagement<'_>> = CpiContext::new(cpi_program, cpi_accounts);
+
+        let receiver : Pubkey = Pubkey::default();
+        let position= &mut state.decrease_position_request.get(index).unwrap();
+
+        router::cpi::plugin_decrease_position(cpi_ctx ,  position.account, position.side , position.marginDelta , position.sizeDelta , execution_fee_receiver);
+        
       state.decrease_position_request.remove(index.try_into().unwrap());
       emit!(DecreasePositionExecuted{
         index : index as u128, receiver : execution_fee_receiver
