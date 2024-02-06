@@ -49,7 +49,7 @@ pub mod order_book {
 
     pub fn update_execution_gas_limit(ctx: Context<UpdateMinExecutionFee>, new_limit: u128) -> Result<()> {
         require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::CallerUnauthorized);     
-        let state =&mut ctx.accounts.state;
+        let state: &mut Account<'_, ContractState> =&mut ctx.accounts.state;
         state.execution_gas_limit = new_limit;
         Ok(())
     }
@@ -209,17 +209,16 @@ pub mod order_book {
     }
 
     pub fn execute_decrease_order(ctx: Context<CreateIncreaseOrder> , order_index :u128 , fee_reciever: Pubkey ) -> Result<()> {
-        let state = &mut ctx.accounts.state;
-        let index_usize = order_index as usize;
-        let order = &mut state.all_decrease_orders[index_usize];
+        let state: &mut Account<'_, ContractState> = &mut ctx.accounts.state;
+        let index_usize: usize = order_index as usize;
+        let order: &mut DecreaseOrder = &mut state.all_decrease_orders[index_usize];
         // external call to pool required here 
-        let market_price = 100;
+        let market_price: u128 = 100;
         _validate_trade_price_X96(order.side , market_price , order.triggerMarketPriceX96);
-        let size_delta_after = order.sizeDelta;
-        let margin_delta_after = order.marginDelta;
+        let size_delta_after: u128 = order.sizeDelta;
+        let margin_delta_after: u128 = order.marginDelta;
         if order.sizeDelta == 0{
             // external call to pool 
-            let margin_delta_after = 0;
         }
 
         // external call to router 
@@ -248,7 +247,7 @@ pub mod order_book {
         value : u128 , 
     ) -> Result<()>  {
         let fee0: u128  = value/2;
-        let state = &mut ctx.accounts.state;
+        let state: &mut Account<'_, ContractState> = &mut ctx.accounts.state;
         if(fee0 < state.min_execution_fee){
             return err!(MyError::InsufficientExecutionFee);
         }

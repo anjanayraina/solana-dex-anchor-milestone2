@@ -9,14 +9,12 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnR");
 const GOVERNOR_PUBKEY: Pubkey = Pubkey::new_from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
 #[program]
 pub mod liquidator {
-    use std::{default, sync::mpsc::Receiver};
-
     use super::*;
 
      
     pub fn initialize(ctx: Context<Initialize> , _router : Pubkey , _pool_factory : Pubkey , _efc:Pubkey) -> Result<()> {
         require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::CallerUnauthorized);
-        let state =&mut ctx.accounts.state;
+        let state: &mut Account<'_, State> =&mut ctx.accounts.state;
         require!(!state.initilized , MyError::AlreadyInitlized );
         state.initilized = true;
         state.router = _router;
@@ -29,7 +27,7 @@ pub mod liquidator {
     pub fn update_price_feed(ctx: Context<UpdatePriceFeed> , _price_feed : Pubkey) -> Result<()> {
         require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::CallerUnauthorized);
         // Logic to update price feed
-        let state =&mut ctx.accounts.state;
+        let state: &mut Account<'_, State> =&mut ctx.accounts.state;
         state.price_feed= _price_feed;
 
         Ok(())
@@ -40,7 +38,7 @@ pub mod liquidator {
         require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::CallerUnauthorized);
 
         // Add new executor to the list
-        let governance_state = &mut ctx.accounts.governance_state;
+        let governance_state: &mut Account<'_, State> = &mut ctx.accounts.governance_state;
         governance_state.executors.push(new_executor);
         Ok(())
     }
@@ -48,7 +46,7 @@ pub mod liquidator {
     // Function to update executor
     pub fn remove_executor(ctx: Context<UpdateExecutor>, executor: Pubkey) -> Result<()> {
         require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::CallerUnauthorized);
-        let address_list = &mut ctx.accounts.state.executors;
+        let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
         address_list.retain(|&x| x != executor);
         // Logic to update executor
         Ok(())
@@ -56,8 +54,8 @@ pub mod liquidator {
 
     // Function to liquidate liquidity position
     pub fn liquidate_liquidity_position(ctx: Context<LiquidateLiquidityPosition>, pool : Pubkey , _position_id : u64 , _fee_reciever : Pubkey) -> Result<()> {
-        let address_list = &mut ctx.accounts.state.executors;
-        let user_pubkey = ctx.accounts.user.key();
+        let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+        let user_pubkey: Pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
 
         Ok(())
@@ -68,26 +66,25 @@ pub mod liquidator {
         // Logic to liquidate position
         let addresses: AccountInfo<'_> = ctx.accounts.authorized_account.clone();
         
-        let user_pubkey = &ctx.accounts.user;
-        let address_list = &ctx.accounts.state.executors;
+        let user_pubkey: &Signer<'_> = &ctx.accounts.user;
+        let address_list: &Vec<Pubkey> = &ctx.accounts.state.executors;
         
         require!(address_list.contains(&user_pubkey.key()) , MyError::CallerUnauthorized);
         // let decrease_index_price = _choose_index_price(ctx ,token , size)?;
-        let decrease_index_price=0;
         let _has_unrealized_profit:bool = false;
-        let size = 100;
+        let size: u128 = 100;
         if size ==0 ||  _has_unrealized_profit {
             // liquidate position 
            return Ok(())
         }
-        let cpi_program = ctx.accounts.router_program.to_account_info();
-        let cpi_accounts = PositionManagement{
+        let cpi_program: AccountInfo<'_> = ctx.accounts.router_program.to_account_info();
+        let cpi_accounts: PositionManagement<'_> = PositionManagement{
             state : ctx.accounts.router_program.to_account_info(),
             authorized_account : addresses,
             user : ctx.accounts.router_program.to_account_info()
         };
         let receiver : Pubkey = Pubkey::default(); // change this to the program Pubkey that  you set in the end 
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        let cpi_ctx: CpiContext<'_, '_, '_, '_, PositionManagement<'_>> = CpiContext::new(cpi_program, cpi_accounts);
         router::cpi::plugin_close_position_by_liquidator(cpi_ctx , pool ,  side , size , receiver);
         // external call to pool 
 

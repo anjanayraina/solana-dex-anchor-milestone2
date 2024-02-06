@@ -12,7 +12,7 @@ mod router {
     use super::*;
     pub fn initilize(ctx: Context<SetData>, efc: Pubkey , reward_farm : Pubkey , fee_distributor : Pubkey) -> Result<()> {
         require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::Unauthorized);     
-        let state =&mut ctx.accounts.state;
+        let state: &mut Account<'_, ContractState> =&mut ctx.accounts.state;
         require!(!state.initilized , MyError::AlreadyInitlized );
         state.efc= efc;
         state.reward_farm = reward_farm;
@@ -27,7 +27,7 @@ mod router {
         require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::CallerUnauthorized);
 
         // Add new executor to the list
-        let governance_state = &mut ctx.accounts.state;
+        let governance_state: &mut Account<'_, ContractState> = &mut ctx.accounts.state;
         governance_state.executors.push(new_plugin);
         Ok(())
     }
@@ -35,7 +35,7 @@ mod router {
         // Function to update executor
     pub fn remove_plugin(ctx: Context<UpdateExecutor>, plugin_address: Pubkey) -> Result<()> {
             require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::CallerUnauthorized);
-            let address_list = &mut ctx.accounts.state.executors;
+            let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
             address_list.retain(|&x| x != plugin_address);
             // Logic to update executor
             Ok(())
@@ -47,7 +47,7 @@ mod router {
         require!(ctx.accounts.authorized_account.key() == GOVERNOR_PUBKEY, MyError::CallerUnauthorized);
 
         // Add new executor to the list
-        let governance_state = &mut ctx.accounts.state;
+        let governance_state: &mut Account<'_, ContractState> = &mut ctx.accounts.state;
         governance_state.liquidators.push(new_liquidator);
         Ok(())
     }
@@ -71,7 +71,7 @@ mod router {
 
     pub fn plugin_transfer_nft(ctx: Context<PluginTransferNFT>, from: Pubkey , to:Pubkey , tokenID:u128) -> Result<()> {
         let address_list = &mut ctx.accounts.state.executors;
-        let user_pubkey = ctx.accounts.user.key();
+        let user_pubkey: Pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
         
         //token transfer
@@ -79,16 +79,16 @@ mod router {
     }
 
     pub fn plugin_open_liquidity_position(ctx: Context<LiquidityPosition>, account: Pubkey, margin:u128, liquidity:u128 , pool : Pubkey ) -> Result<u128> {
-        let address_list = &mut ctx.accounts.state.executors;
-        let user_pubkey = ctx.accounts.user.key();
+        let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+        let user_pubkey: Pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized); 
         /// external call to pool
         Ok(100)
     }
 
     pub fn plugin_close_liquidity_position(ctx: Context<LiquidityPosition>,  _positionID:u128 ,  _receiver:Pubkey , pool :Pubkey ) -> Result<()> {
-        let address_list = &mut ctx.accounts.state.executors;
-        let user_pubkey = ctx.accounts.user.key();
+        let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+        let user_pubkey: Pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);   
         // extrernal call to pool
       Ok(())
@@ -98,8 +98,8 @@ mod router {
         _positionID:u128,
         _marginDelta:u128,
         _receiver:Pubkey) -> Result<()> {
-            let address_list = &mut ctx.accounts.state.executors;
-            let user_pubkey = ctx.accounts.user.key();
+            let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+            let user_pubkey: Pubkey = ctx.accounts.user.key();
             require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
         // return a u128 value
       Ok(())
@@ -113,8 +113,8 @@ mod router {
         account: Pubkey, 
         liquidity_delta: u128
     ) -> Result<()> {
-        let address_list = &mut ctx.accounts.state.executors;
-        let user_pubkey = ctx.accounts.user.key();
+        let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+        let user_pubkey: Pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);  
         Ok(())
     }
@@ -128,8 +128,8 @@ mod router {
         liquidity_delta: u128, 
         receiver: Pubkey
     ) -> Result<()> {
-        let address_list = &mut ctx.accounts.state.executors;
-        let user_pubkey = ctx.accounts.user.key();
+        let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+        let user_pubkey: Pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
         Ok(())
     }
@@ -143,8 +143,8 @@ mod router {
         size_delta: u128
     ) -> Result<u128> {
         // TODO: Implement access control, position increase logic
-        let address_list = &mut ctx.accounts.state.executors;
-        let user_pubkey = ctx.accounts.user.key();
+        let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+        let user_pubkey: Pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);    
         Ok(0) // Placeholder for trade price
     }
@@ -159,8 +159,8 @@ mod router {
         receiver: Pubkey
     ) -> Result<u128> {
         // TODO: Implement access control, position decrease logic
-        let address_list = &mut ctx.accounts.state.executors;
-        let user_pubkey = ctx.accounts.user.key();
+        let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+        let user_pubkey: Pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);    
         Ok(0) // Placeholder for trade price
     }
@@ -173,7 +173,6 @@ mod router {
         size_delta: u128, 
         receiver: Pubkey
     ) -> Result<()> {
-        // TODO: Implement access control for liquidator, position closing logic
         let address_list = &mut ctx.accounts.state.executors;
         let user_pubkey = ctx.accounts.user.key();
         require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);
@@ -188,16 +187,35 @@ mod router {
             referral_token: u128, 
             receiver: Pubkey
         ) -> Result<()> {
-            // TODO: Implement access control for liquidator, position closing logic
-            let address_list = &mut ctx.accounts.state.executors;
-            let user_pubkey = ctx.accounts.user.key();
+            let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+            let user_pubkey: Pubkey = ctx.accounts.user.key();
             require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);        
             Ok(())
-        }
+    }
 
+    pub fn plugin_collect_farm_liquidity_reward(
+        ctx: Context<PositionManagement>, 
+        pools: Vec<Pubkey>, 
+        receiver: Pubkey,
+        owner : Pubkey
+    ) -> Result<()> {
+        let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+        let user_pubkey: Pubkey = ctx.accounts.user.key();
+        require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);        
+        Ok(())
+}
 
-
-  
+pub fn plugin_collect_farm_risk_buffer_reward_batch(
+    ctx: Context<PositionManagement>, 
+    pools: Vec<Pubkey>, 
+    receiver: Pubkey,
+    owner : Pubkey
+) -> Result<()> {
+    let address_list: &mut Vec<Pubkey> = &mut ctx.accounts.state.executors;
+    let user_pubkey: Pubkey = ctx.accounts.user.key();
+    require!(address_list.contains(&user_pubkey) , MyError::CallerUnauthorized);        
+    Ok(())
+}
 
 
 }
