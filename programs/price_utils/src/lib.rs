@@ -8,19 +8,90 @@ pub mod price_util {
     use super::*;
 
     // // Corresponds to `updatePriceState` in Solidity
-    // pub fn update_price_state(ctx: Context<UpdatePriceState>, parameter: UpdatePriceStateParameter) -> Result<()> {
-    //     // Function logic goes here
-    //     Ok(())
-    // }
+    pub fn update_price_state(ctx: Context<UpdatePriceState>, global_position: GlobalLiquidityPosition , price_state : PriceState , parameter : UpdatePriceStateParameter) -> Result<()> {
+        // Function logic goes here
+        Ok(())
+    }
 
     // Additional functions can be added here
 }
 
-// #[derive(Accounts)]
-// pub struct UpdatePriceState<'info> {
-//     // Define the accounts needed for the update_price_state function
-//     // This includes accounts that will be read from or written to
-// }
+pub fn calculate_premium_price_after(step : &mut SimulateMoveStep , reached : bool , size_usd : u128 ) -> Result<u128>{
+    
+    if reached {
+        return Ok(step.to.premium_rate_x96);
+    }
+
+
+    Ok(100)
+}
+
+pub fn calculate_ax248_and_bx96(side : bool , from :  PriceVertex , to : PriceVertex) -> (u128 , i128){
+    let mut to_new = to;
+    let mut from_new = from;
+    if from_new.size > to_new.size {
+        let temp = from_new;
+        from_new = to_new;
+        to_new = temp;
+    }
+
+    if to_new.premium_rate_x96 >= from_new.premium_rate_x96 {
+        return (0 ,0);
+    }
+
+    let size_delta = to_new.size - from_new.size;
+    let ax348 = (to_new.premium_rate_x96 - from_new.premium_rate_x96) * 100 /size_delta;
+    let mut bx96: i128 = 0;
+    let numerator_part_1_x96 = (from_new.premium_rate_x96 as u128) *to_new.size; 
+    let numerator_part_2_x96 = (to_new.premium_rate_x96 as u128) *from_new.size;
+    if side {
+        if numerator_part_1_x96 >= numerator_part_2_x96 {
+            bx96 = ((numerator_part_1_x96 - numerator_part_2_x96) / size_delta) as i128 ;
+        }
+
+        else {
+            bx96 = ((numerator_part_2_x96 - numerator_part_1_x96) / size_delta) as i128;
+        }
+
+    }
+
+    else {
+        if numerator_part_2_x96 >= numerator_part_1_x96 {
+            bx96 = ((numerator_part_2_x96 - numerator_part_1_x96) / size_delta) as i128;
+        }
+
+        else {
+            bx96 = -((numerator_part_2_x96 as i128 - numerator_part_1_x96 as i128) / size_delta as i128);
+        }
+
+    }
+
+    return (ax348 , bx96);
+
+
+    (100 , 100)
+}
+
+#[error_code]
+pub enum Errors {
+    #[msg("Unauthorized access")]
+    CallerUnauthorized,
+    #[msg("Invalid operation")]
+    InvalidOperation,
+    #[msg("Already Initilized")]
+    AlreadyInitlized,
+    #[msg("Insufficient execution fee")]
+    InsufficientExecutionFee,
+    #[msg("Cannot cancel")]
+    CannotCancel,
+}
+
+
+#[derive(Accounts)]
+pub struct UpdatePriceState<> {
+    // Define the accounts needed for the update_price_state function
+    // This includes accounts that will be read from or written to
+}
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct UpdatePriceStateParameter {
@@ -45,7 +116,7 @@ pub struct SimulateMoveStep {
     // Convert addresses to Pubkey or other suitable types
     pub from: Pubkey,
     pub current: Pubkey,
-    pub to: Pubkey,
+    pub to: PriceVertex,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
