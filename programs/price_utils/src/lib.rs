@@ -26,7 +26,45 @@ pub fn calculate_premium_price_after(step : &mut SimulateMoveStep , reached : bo
     return 100;
 }
 
-pub fn update_price_state(
+pub fn update_price_state( parameter: UpdatePriceStateParameter ,  global_position : GlobalLiquidityPosition , mut price_state : PriceState) -> Result<()> {
+    if parameter.size_delta == 0 {
+        return err!(Errors::InvalidOperation);
+    }
+
+    let mut global_position_cache = global_position.clone();
+    let mut price_state_cache = PriceStateCache {
+        premium_rate_x96: price_state.premium_rate_x96,
+        pending_vertex_index: price_state.pending_vertex_index,
+        liquidation_vertex_index: parameter.liquidation_vertex_index,
+        current_vertex_index: price_state.current_vertex_index,
+        basis_index_price_x96: price_state.basis_index_price_x96 as u64,
+    };
+
+    let balanced = (global_position_cache.net_size | global_position_cache.liquidation_buffer_net_size) == 0;
+    if balanced {
+        price_state_cache.basis_index_price_x96 = parameter.index_price_x96;
+    }
+
+    let improve_balance = parameter.side == global_position_cache.side && !balanced;
+    // Assuming `_update_price_state` is another function you'll implement
+    let (trade_price_x96_times_size_total, size_left, total_buffer_used) = self::_update_price_state(
+        &mut global_position_cache,
+        &mut price_state,
+        &mut price_state_cache,
+        &parameter,
+        improve_balance,
+    );
+
+    // Implement the logic to apply changes from price_state_cache back to the actual accounts
+    // This might involve directly modifying ctx.accounts.price_state and ctx.accounts.global_position
+
+    Ok(())
+}
+
+// Additional helper functions like `_update_price_state` would be defined here
+
+
+pub fn _update_price_state(
     global_position_cache: &GlobalLiquidityPosition, 
     price_state: &mut PriceState,
     price_state_cache: &mut PriceStateCache, 
@@ -356,7 +394,7 @@ pub struct PriceVertex {
 pub struct PriceState {
     pub premium_rate_x96: u128,
     pub pending_vertex_index: u8,
-    pub current_vertex_index: u8,
+    pub current_vertex_index: u128,
     pub basis_index_price_x96: u128, // Adjusted for simplicity
     pub price_vertices: [PriceVertex; 10],
     pub liquidation_buffer_net_sizes: [u128; 10],
