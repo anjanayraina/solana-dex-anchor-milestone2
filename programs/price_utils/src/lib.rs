@@ -93,10 +93,67 @@ pub fn update_price_state(
     step.to = vertex.clone();
     step.from = vertex.clone();
     step.current = vertex; 
-
+    let ( trade_price , _ , _ , _) = simulate_move(&mut step);
+    total_buffer_used+=step.size_left;
+    let liquidation_vertex_index = price_state_cache.liquidation_vertex_index;
+    let liquidation_buffer_net_size_after = price_state.liquidation_buffer_net_sizes.get(liquidation_vertex_index as usize).unwrap() + step.size_left;
+    price_state.liquidation_buffer_net_sizes[liquidation_vertex_index as usize] = liquidation_buffer_net_size_after;
 
         }
     }
+// Else part for when the balance rate got better
+else {
+    // Logic when balance rate got better
+    for (index, vertex) in price_state.price_vertices.iter().enumerate().rev() {
+        let i = index ; // assuming the use of u8 for indexing aligns with your data sizes
+        let mut buffer_size_after = *price_state.liquidation_buffer_net_sizes.get(i).unwrap();
+        let mut size_used = 0;
+        if(buffer_size_after > 0){
+            let vertex = price_state.price_vertices[index as usize].clone();
+            step.from = vertex.clone();
+            step.to = vertex.clone();
+            size_used = std::cmp::min(buffer_size_after, step.size_left);
+            buffer_size_after-=size_used;
+            price_state.liquidation_buffer_net_sizes[i] = buffer_size_after;
+            total_buffer_used+=size_used;
+            step.size_left-=size_used;
+            let (trade_price_x96, size_used, _, premium_rate_after_x96) = simulate_move(&mut step);
+            trade_price_x96_times_size_total+=trade_price_x96*(size_used as i128);
+
+        }
+        step.from = vertex.clone();
+        step.to = if i > 0 {
+            price_state.price_vertices[i as usize - 1].clone()
+        } else {
+            vertex.clone() // handle the edge case for i == 0
+        };
+
+        
+
+        if size_used < step.size_left {
+            step.from = price_state.price_vertices.get(i as usize).unwrap().clone();
+            step.to = price_state.price_vertices.get(i-1 as usize).unwrap().clone();
+            let (trade_price_x96, size_used, reached , premium_rate_after_x96) = simulate_move(&mut step);
+            if reached {
+                price_state_cache.current_vertex_index = (i-1) as u128;
+                step.current = step.to;
+            }
+            step.size_left-=size_used;
+            trade_price_x96_times_size_total+=trade_price_x96*(size_used as i128 );
+            price_state_cache.premium_rate_x96 = premium_rate_after_x96;
+
+        }
+
+        // Update calculations
+        // trade_price_x96_times_size_total += trade_price_x96 * size_used as i128;
+        // total_buffer_used += size_used;
+        // step.size_left = step.size_left.saturating_sub(size_used);
+    }
+
+
+}
+// Assuming the rest of your function logic follows here
+
 
     // Return calculated values
     // These are placeholders; replace them with actual calculated values
