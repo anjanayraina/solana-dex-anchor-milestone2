@@ -16,15 +16,44 @@ pub mod price_util {
     // Additional functions can be added here
 }
 
-pub fn calculate_premium_price_after(step : &mut SimulateMoveStep , reached : bool , size_usd : u128 ) -> Result<u128>{
+pub fn calculate_premium_price_after(step : &mut SimulateMoveStep , reached : bool , size_usd : u128 ) -> (u128){
     
     if reached {
-        return Ok(step.to.premium_rate_x96);
+        return step.to.premium_rate_x96;
     }
 
 
-    Ok(100)
+    return 100;
 }
+
+pub fn calculate_reached_and_size_used(step : &mut SimulateMoveStep) -> (bool , u128) {
+    return (true , 0);
+}
+
+pub fn simulate_move(step: &mut SimulateMoveStep) -> (i128, u128, bool, u128) {
+    let (reached, size_used) = calculate_reached_and_size_used(step);
+    let premium_rate_after_x96 = calculate_premium_price_after(step, reached, size_used);
+    let premium_rate_before_x96 = step.current.premium_rate_x96;
+
+    let (price_delta_x96_down, price_delta_x96_up) = (100, 100 );   //add the multdiv library    mul_div_2(step.basis_index_price_x96, premium_rate_before_x96 + premium_rate_after_x96, Q96 << 1);
+
+    let trade_price_x96 = if step.side { // true for long
+        if step.improve_balance {
+            (step.index_price_x96 as i128 - price_delta_x96_down as i128).max(0)
+        } else {
+            (step.index_price_x96 + price_delta_x96_up) as i128
+        }
+    } else { // false for short
+        if step.improve_balance {
+            (step.index_price_x96 + price_delta_x96_down) as i128
+        } else {
+            (step.index_price_x96 as i128 - price_delta_x96_up as i128).max(0)
+        }
+    };
+
+    (trade_price_x96, size_used, reached, premium_rate_after_x96)
+}
+
 
 pub fn calculate_ax248_and_bx96(side : bool , from :  PriceVertex , to : PriceVertex) -> (u128 , i128){
     let mut to_new = to;
@@ -72,6 +101,26 @@ pub fn calculate_ax248_and_bx96(side : bool , from :  PriceVertex , to : PriceVe
     (100 , 100)
 }
 
+pub fn calculate_market_price_x96(global_side : bool , side : bool , index_price : u128 , basis_index_price : u128 ,premium_rate : u128) -> (u128 ) {
+    let price_delta_down = 100 ; // add multdiv here after library creation 
+    let  price_delta_up = 100;
+    let mut market_price =10;
+    if global_side {
+        market_price = if side {
+            if index_price > price_delta_down { index_price - price_delta_down } else { 0 }
+        } else {
+            if index_price > price_delta_up { index_price - price_delta_up } else { 0 }
+        };
+    } else {
+        market_price = if side {
+            index_price + price_delta_up
+        } else {
+            index_price + price_delta_down
+        };
+    }
+
+    market_price
+}
 #[error_code]
 pub enum Errors {
     #[msg("Unauthorized access")]
@@ -115,7 +164,7 @@ pub struct SimulateMoveStep {
     pub improve_balance: bool,
     // Convert addresses to Pubkey or other suitable types
     pub from: Pubkey,
-    pub current: Pubkey,
+    pub current: PriceVertex,
     pub to: PriceVertex,
 }
 
