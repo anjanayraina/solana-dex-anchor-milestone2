@@ -26,9 +26,95 @@ pub fn calculate_premium_price_after(step : &mut SimulateMoveStep , reached : bo
     return 100;
 }
 
-pub fn calculate_reached_and_size_used(step : &mut SimulateMoveStep) -> (bool , u128) {
-    return (true , 0);
+pub fn update_price_state(
+    global_position_cache: &GlobalLiquidityPosition, 
+    price_state: &mut PriceState,
+    price_state_cache: &mut PriceStateCache, 
+    parameter: &UpdatePriceStateParameter, 
+    improve_balance: bool,
+) -> (i128, u128, u128) {
+    // Initialized with a default vertex
+    let default_vertex = PriceVertex{
+        size: 0,
+        premium_rate_x96 : 0
+    };
+
+    let mut step = SimulateMoveStep {
+        side: parameter.side,
+        size_left: parameter.size_delta,
+        index_price_x96: parameter.index_price_x96,
+        basis_index_price_x96: price_state_cache.basis_index_price_x96,
+        improve_balance,
+        from: default_vertex.clone(),
+        current: PriceVertex {
+            size: global_position_cache.net_size,
+            premium_rate_x96: price_state_cache.premium_rate_x96,
+        },
+        to: default_vertex.clone(), // Assuming a default implementation or placeholder
+    };
+
+    let mut trade_price_x96_times_size_total: i128 = 0;
+    let mut total_buffer_used: u128 = 0;
+
+    // Logic for adjusting the price state
+    // This is a simplified placeholder logic. You will replace this with actual logic.
+    if !step.improve_balance {
+        // Simulate some adjustments based on your logic
+        // For demonstration, let's iterate through some vertices as an example
+        for i in price_state_cache.current_vertex_index..price_state.price_vertices.len() as u128 {
+            let vertex = &price_state.price_vertices[(i-1) as usize];
+            step.from = vertex.clone();
+            step.to = (&price_state.price_vertices[i as usize]).clone();
+
+            
+            // Placeholder for simulate_move call - replace with actual logic
+            // let (trade_price_x96, size_used, _, premium_rate_after_x96) = simulate_move(&step);
+            let (trade_price_x96, size_used, _, premium_rate_after_x96) = simulate_move(&mut step);
+            if size_used < step.size_left && !(parameter.liquidation && price_state_cache.liquidation_vertex_index == i as u8) {
+                price_state_cache.current_vertex_index = i+1;
+                step.current = step.to.clone();
+            } 
+            // Placeholder adjustments
+            trade_price_x96_times_size_total += trade_price_x96*(size_used as i128 );
+            total_buffer_used += size_used;
+            
+            
+            step.size_left = step.size_left.saturating_sub(size_used);
+        }
+
+        if(step.size_left > 0){
+            if(!parameter.liquidation) {
+                return (-1 , 0 ,0); // throw error at this condition 
+            }
+
+            // Assuming `priceVertices` is accessible and `liquidationVertexIndex` is within bounds
+    let vertex = price_state.price_vertices[price_state_cache.liquidation_vertex_index as usize].clone(); // Clone if necessary
+
+    step.to = vertex.clone();
+    step.from = vertex.clone();
+    step.current = vertex; 
+
+
+        }
+    }
+
+    // Return calculated values
+    // These are placeholders; replace them with actual calculated values
+    (trade_price_x96_times_size_total, step.size_left, total_buffer_used)
 }
+
+fn calculate_reached_and_size_used(step: &SimulateMoveStep) -> (bool, u128) {
+    let size_cost = if step.improve_balance {
+        step.current.size.saturating_sub(step.to.size)
+    } else {
+        step.to.size.saturating_sub(step.current.size)
+    };
+    let reached = step.size_left >= size_cost;
+    let size_used = if reached { size_cost } else { step.size_left };
+
+    (reached, size_used)
+}
+
 
 pub fn simulate_move(step: &mut SimulateMoveStep) -> (i128, u128, bool, u128) {
     let (reached, size_used) = calculate_reached_and_size_used(step);
@@ -37,13 +123,13 @@ pub fn simulate_move(step: &mut SimulateMoveStep) -> (i128, u128, bool, u128) {
 
     let (price_delta_x96_down, price_delta_x96_up) = (100, 100 );   //add the multdiv library    mul_div_2(step.basis_index_price_x96, premium_rate_before_x96 + premium_rate_after_x96, Q96 << 1);
 
-    let trade_price_x96 = if step.side { // true for long
+    let trade_price_x96 = if step.side { 
         if step.improve_balance {
             (step.index_price_x96 as i128 - price_delta_x96_down as i128).max(0)
         } else {
             (step.index_price_x96 + price_delta_x96_up) as i128
         }
-    } else { // false for short
+    } else { 
         if step.improve_balance {
             (step.index_price_x96 + price_delta_x96_down) as i128
         } else {
@@ -163,7 +249,7 @@ pub struct SimulateMoveStep {
     pub basis_index_price_x96: u64,
     pub improve_balance: bool,
     // Convert addresses to Pubkey or other suitable types
-    pub from: Pubkey,
+    pub from: PriceVertex,
     pub current: PriceVertex,
     pub to: PriceVertex,
 }
@@ -173,7 +259,7 @@ pub struct PriceStateCache {
     pub premium_rate_x96: u128,
     pub pending_vertex_index: u8,
     pub liquidation_vertex_index: u8,
-    pub current_vertex_index: u8,
+    pub current_vertex_index: u128,
     pub basis_index_price_x96: u64,
 }
 
