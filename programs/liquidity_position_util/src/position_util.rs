@@ -232,7 +232,31 @@ pub struct Position {
     pub entry_price_x96: u128, // Adjusted to u128 for simplicity; consider using a custom type or handling for Q64.96 fixed-point numbers.
     pub entry_funding_rate_growth_x96: i128, // Adjusted to i128 for compatibility
 }
+pub fn split_fee(trading_fee: u128, fee_rate: u32) -> u128 {
+    let basis_points_divisor = 10000u128; // Assuming a basis point divisor of 10,000 for percentage calculations
+    (trading_fee * fee_rate as u128) / basis_points_divisor
+}
 
+/// Chooses the previous global funding rate growth based on the position side.
+pub fn choose_previous_global_funding_rate_growth_x96(
+    previous_global_funding_rate: &PreviousGlobalFundingRate,
+    is_long: bool,
+) -> i128 { // Assuming simplified usage of i128 to represent fixed-point numbers
+    if is_long {
+        previous_global_funding_rate.long_funding_rate_growth_x96
+    } else {
+        previous_global_funding_rate.short_funding_rate_growth_x96
+    }
+}
+
+/// Checks if the calculated liquidation price is acceptable based on the position side and entry price.
+pub fn is_acceptable_liquidation_price_x96(
+    is_long: bool,
+    liquidation_price_x96: u128, // Simplified to u128 for consistency
+    entry_price_x96: u128, // Simplified to u128 for consistency
+) -> bool {
+    (is_long && liquidation_price_x96 < entry_price_x96) || (!is_long && liquidation_price_x96 > entry_price_x96)
+}
 pub fn change_max_size(
     global_liquidity_position: &GlobalLiquidityPosition,
     base_cfg: &MarketBaseConfig,
