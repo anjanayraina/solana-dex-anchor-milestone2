@@ -197,7 +197,6 @@ pub struct GlobalLiquidityPosition {
 pub struct LiquidityPosition {
     pub margin: u128,
     pub liquidity: u128,
-    // Again, assuming entryUnrealizedPnLGrowthX64 as i128 for simplicity.
     pub entry_unrealized_pnl_growth_x64: i128,
 }
 
@@ -208,29 +207,91 @@ pub struct GlobalPosition {
     pub short_size: u128,
     pub max_size: u128,
     pub max_size_per_position: u128,
-    pub long_funding_rate_growth_x96: i128, // Adjusted to i128 for compatibility
-    pub short_funding_rate_growth_x96: i128, // Adjusted to i128 for compatibility
+    pub long_funding_rate_growth_x96: i128, 
+    pub short_funding_rate_growth_x96: i128, 
 }
 
 
 pub struct PreviousGlobalFundingRate {
-    pub long_funding_rate_growth_x96: i128, // Adjusted to i128 for compatibility
-    pub short_funding_rate_growth_x96: i128, // Adjusted to i128 for compatibility
+    pub long_funding_rate_growth_x96: i128, 
+    pub short_funding_rate_growth_x96: i128, 
 }
 
 
 pub struct GlobalFundingRateSample {
     pub last_adjust_funding_rate_time: u64,
     pub sample_count: u16,
-    pub cumulative_premium_rate_x96: i128, // Adjusted to i128 for compatibility
+    pub cumulative_premium_rate_x96: i128, 
 }
 
 
 pub struct Position {
     pub margin: u128,
     pub size: u128,
-    pub entry_price_x96: u128, // Adjusted to u128 for simplicity; consider using a custom type or handling for Q64.96 fixed-point numbers.
-    pub entry_funding_rate_growth_x96: i128, // Adjusted to i128 for compatibility
+    pub entry_price_x96: u128, 
+    pub entry_funding_rate_growth_x96: i128, 
+}
+fn calculate_trading_fee(size_delta: u128, trade_price_x96: u128, trading_fee_rate: u32) -> u128 {
+    // Placeholder for trading fee calculation
+    0
+}
+pub struct State {
+   
+    pub price_state: PriceState,
+    pub usd_balance: u128,
+    pub protocol_fee: u128,
+    pub liquidity_positions : Vec<AccountToLiquidity> , 
+    pub global_liqudity_position : GlobalLiquidityPosition,
+
+}
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+
+pub struct AccountToLiquidity {
+    account : Pubkey , 
+    liquidity : u128, 
+    margin : u128 , 
+    entry_unreaized_pnl_growth : u128,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct PriceState {
+    premium_rate_x96: u128,
+    pending_vertex_index: u8,
+    current_vertex_index: u8,
+    basis_index_price_x96: u128,
+    // Additional fields...
+}
+
+
+/// Simplified version of _calculateFee
+pub fn calculate_fee(
+    state: &mut State,
+    fee_rate_cfg: &MarketFeeRateConfig,
+    parameter: &DistributeFeeParameter,
+) -> (u128, u128) { // Returns tradingFee and liquidityFee
+    let trading_fee = calculate_trading_fee(
+        parameter.size_delta,
+        parameter.trade_price_x96,
+        parameter.trading_fee_state.trading_fee_rate,
+    );
+
+    if trading_fee == 0 {
+        return (0, 0);
+    }
+
+    let protocol_fee = split_fee(trading_fee, fee_rate_cfg.protocol_fee_rate);
+    state.protocol_fee += protocol_fee;
+
+    let liquidity_fee = trading_fee - protocol_fee;
+
+    // Assuming implementation for referral fee logic here
+    let referral_fee = 0u128; // Placeholder for actual referral fee calculation
+    let referral_parent_fee = 0u128; // Placeholder for actual referral parent fee calculation
+
+    // Adjust liquidity fee based on referral fees
+    let adjusted_liquidity_fee = liquidity_fee - (referral_fee + referral_parent_fee);
+
+    (trading_fee, adjusted_liquidity_fee)
 }
 pub fn split_fee(trading_fee: u128, fee_rate: u32) -> u128 {
     let basis_points_divisor = 10000u128; // Assuming a basis point divisor of 10,000 for percentage calculations
