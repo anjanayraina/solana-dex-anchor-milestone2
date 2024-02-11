@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
+mod helper;
 
+use crate::helper as other_helper;
 declare_id!("XNiBJSgxaaUkYfX8outPevtBcmao6LV1UrTQiyJ2YJs");
 
 
@@ -10,24 +12,116 @@ pub mod liquidity_position_util {
         Ok(())
     }
 
-    pub fn increase_liquidity_position(state : State , market_congif :&mut MarketConfig , parameter : IncreaseLiquidityPositionContext) -> (u128) {
+    pub fn increase_liquidity_position(state : &mut State , market_congif :&mut MarketConfig , parameter : &mut IncreaseLiquidityPositionContext , index : usize) -> (u128) {
         // call using MarketUtil , add after wards 
         let base_config = &mut market_congif.base_config;
-        // let position_cache = &mut state.li
+        let position_cache = &mut state.liquidity_positions.get(index).unwrap();
+        let global_liquidity_positions = &mut state.global_liqudity_position;
+        let mut reaized_pnl = 0;
+        if true { //  add this after all the libraries are created 
+            if true{ // check for liquidity delta 0 , if yes then revert 
+
+            }
+
+        }
+        else {
+            // reaized_pnl = _calculate_realized_pnl(global_liquidity_positions , position_cache); // uncomment this when the other libraries are created 
+        }
+        let mut margin_after_int = 0;
+        margin_after_int = position_cache.margin + parameter.margin_delta;
+        margin_after_int+=reaized_pnl;
+        // revert if insufficient margin 
+        let mut margin_after = margin_after_int;
+        let mut liquidity_after = position_cache.liquidity;
+        if parameter.liquidity_delta > 0 
+        {
+            liquidity_after+=parameter.liquidity_delta;
+            // call to market util
+            global_liquidity_positions.liquidity = global_liquidity_positions.liquidity + parameter.liquidity_delta;
+
+        }
+
+        // add validate position call 
+        if let Some(position) = state.liquidity_positions.get_mut(index) {
+            position.margin = margin_after;
+            position.liquidity = liquidity_after;
+            position.entry_unreaized_pnl_growth = global_liquidity_positions.entry_unreaized_pnl_growth;
+
+        } else {
+            // Handle the case where index is out of bounds
+        }
+
         return 100; 
     }
 
+    pub fn decrease_liquidity_position(
+        state: &mut State,
+        market_config: &MarketConfig,
+        parameter: &DecreaseLiquidityPositionParameter,
+    ) -> (u128, u128) {
+        let position = state.liquidity_positions.get_mut(parameter.account_index).unwrap(); // Error if index is out of bounds
+    
+        if position.liquidity == 0 {
+            // error statement 
+                }
+    
+        if position.liquidity < parameter.liquidity_delta {
+            // error statement 
+        }
+    
+        let realized_pnl_delta = 0; // Placeholder for realized PnL calculation logic
+    
+        let margin_after_int = position.margin as i128 + parameter.margin_delta as i128 + realized_pnl_delta;
+        if margin_after_int < 0 {
+            return (0, 0 ) // Replace with a more specific error
+        }
+    
+        let liquidity_after = position.liquidity.checked_sub(parameter.liquidity_delta).unwrap(); // Replace with a more specific error if subtraction underflows
+    
+        // decrease global liquidity
+    
+        // Apply changes to the position
+        position.margin = margin_after_int as u128;
+        position.liquidity = liquidity_after;
+    
+        
+    
+        return (position.margin, parameter.margin_delta); // Return updated margin and original margin delta
+    }
+    
+    pub fn decrease_global_liquidity(
+        global_liquidity_position: &mut GlobalLiquidityPosition, // mutable reference is necessary to modify the struct
+        global_position: &GlobalPosition, // immutable reference since we're only reading from this struct
+        liquidity_delta: u128,
+    ) -> Result<()> {
+        let liquidity_after = global_liquidity_position.liquidity.checked_sub(liquidity_delta).unwrap();
+    
+        if liquidity_after == 0 && (global_position.long_size | global_position.short_size) > 0 {
+            
+        }
+    
+        global_liquidity_position.liquidity = liquidity_after; // modifying the struct, hence &mut is necessary
+    
+        Ok(())
+    }
 
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct IncreaseLiquidityPositionContext {
-
+    margin_delta : u128, 
+    liquidity_delta : u128 , 
+    
 }
 
 // Define your structs here as needed.
 
-
+pub struct DecreaseLiquidityPositionParameter {
+    pub account_index: usize,
+    pub margin_delta: u128,
+    pub liquidity_delta: u128,
+    // Include other parameters as needed
+}
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 struct MarketDescriptor {
@@ -38,10 +132,11 @@ struct PriceFeed {
     // Define fields according to your Solidity IPriceFeed
 }
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
-struct GlobalLiquidityPosition {
+pub struct GlobalLiquidityPosition {
     net_size: u128,
     liquidation_buffer_net_size: u128,
-    // Additional fields...
+    liquidity : u128 , 
+    entry_unreaized_pnl_growth : u128 , 
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
@@ -129,7 +224,8 @@ pub struct State {
     pub price_state: PriceState,
     pub usd_balance: u128,
     pub protocol_fee: u128,
-    pub liquidity_positions : Vec<AccountToLiquidity>
+    pub liquidity_positions : Vec<AccountToLiquidity> , 
+    pub global_liqudity_position : GlobalLiquidityPosition,
     // Referral fees, liquidity positions, positions, and liquidation fund positions
     // would be managed through PDAs or alternative data structures.
 }
@@ -140,11 +236,15 @@ pub struct State {
 pub struct AccountToLiquidity {
     account : Pubkey , 
     liquidity : u128, 
+    margin : u128 , 
+    entry_unreaized_pnl_growth : u128,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct GlobalPosition {
     // Fields representing global position...
+    long_size: u128, 
+    short_size : u128 , 
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
