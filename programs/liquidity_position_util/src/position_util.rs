@@ -10,17 +10,12 @@ pub struct TradingFeeState {
     pub referral_parent_token: Pubkey,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
-pub enum Side {
-    Long,
-    Short,
-}
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct IncreasePositionParameter {
     pub market: Pubkey, 
     pub account: Pubkey,
-    pub side: Side,
+    pub side: bool,
     pub margin_delta: u128,
     pub size_delta: u128,
 }
@@ -29,7 +24,7 @@ pub struct IncreasePositionParameter {
 pub struct DecreasePositionParameter {
     pub market: Pubkey,
     pub account: Pubkey,
-    pub side: Side,
+    pub side: bool,
     pub margin_delta: u128,
     pub size_delta: u128,
     pub receiver: Pubkey,
@@ -39,14 +34,14 @@ pub struct DecreasePositionParameter {
 pub struct LiquidatePositionParameter {
     pub market: Pubkey,
     pub account: Pubkey,
-    pub side: Side,
+    pub side: bool,
     pub fee_receiver: Pubkey,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct MaintainMarginRateParameter {
     pub margin: i128, // Adjusted to i128
-    pub side: Side,
+    pub side: bool,
     pub size: u128,
     pub entry_price_x96: u128,
     pub decrease_price_x96: u128,
@@ -58,7 +53,7 @@ pub struct MaintainMarginRateParameter {
 pub struct LiquidateParameter {
     pub market: Pubkey,
     pub account: Pubkey,
-    pub side: Side,
+    pub side: bool,
     pub trade_price_x96: u128,
     pub decrease_index_price_x96: u128,
     pub required_funding_fee: i128, // Adjusted to i128
@@ -74,3 +69,4 @@ pub struct DistributeFeeParameter {
     pub trading_fee_state: TradingFeeState,
     pub liquidation_fee: i128, // Adjusted to i128
 }
+

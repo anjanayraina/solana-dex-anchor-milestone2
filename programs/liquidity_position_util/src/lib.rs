@@ -3,6 +3,13 @@ mod helper;
 mod math;
 mod liquidity_position_util;
 mod position_util;
+pub mod interfaces{
+    pub mod IConfigurable;
+pub mod IMarketLiquidityPosition; 
+pub mod IMarketPosition;}
+use crate::interfaces::IConfigurable;
+use crate::interfaces::IMarketLiquidityPosition;
+use crate::interfaces::IMarketPosition;
 use crate::liquidity_position_util as helper_liquidity_position;
 use crate::position_util as helper_position_util;
 use crate::helper as other_helper;
