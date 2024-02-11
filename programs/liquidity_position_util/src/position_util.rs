@@ -263,6 +263,39 @@ pub struct PriceState {
 }
 
 
+/// Calculate the liquidation fee.
+pub fn calculate_liquidation_fee(size: u128, entry_price_x96: u128, liquidation_fee_rate: u32) -> u128 {
+    let bp :u128= 100; // add when adding constanst 
+    let q96   = 100 ; // change this too 
+    let numerator = size.checked_mul(liquidation_fee_rate as u128).unwrap();
+    let denominator = bp.checked_mul(q96).unwrap();
+    numerator.checked_mul(entry_price_x96).unwrap().checked_div(denominator).unwrap()
+}
+
+/// Calculate the funding fee of a position.
+pub fn calculate_funding_fee(global_funding_rate_growth_x96: i128, position_funding_rate_growth_x96: i128, position_size: u128) -> i128 {
+    let delta_x96 = global_funding_rate_growth_x96 - position_funding_rate_growth_x96;
+    let bp = 100; // add when adding constanst 
+    let q96   = 100 ; // change this too 
+    if delta_x96 >= 0 {
+        (u128::try_from(delta_x96).unwrap().checked_mul(position_size).unwrap().checked_div(q96).unwrap() as i128)
+    } else {
+        -(u128::try_from(-delta_x96).unwrap().checked_mul(position_size).unwrap().checked_div(q96).unwrap() as i128)
+    }
+}
+
+/// Calculate the maintenance margin.
+pub fn calculate_maintenance_margin(size: u128, entry_price_x96: u128, index_price_x96: u128, liquidation_fee_rate: u32, trading_fee_rate: u32, liquidation_execution_fee: u64) -> u128 {
+    let fee_part = entry_price_x96.checked_mul(liquidation_fee_rate as u128).unwrap()
+        .checked_add(index_price_x96.checked_mul(trading_fee_rate as u128).unwrap()).unwrap();
+    let bp = 100; // add when adding constanst 
+    let q96   = 100 ; // change this too 
+    let scaled_fee = fee_part.checked_div(bp).unwrap();
+    let margin_without_fee = size.checked_mul(scaled_fee).unwrap().checked_div(q96).unwrap();
+    margin_without_fee.checked_add(liquidation_execution_fee as u128).unwrap()
+}
+
+
 /// Simplified version of _calculateFee
 pub fn calculate_fee(
     state: &mut State,
@@ -422,10 +455,7 @@ fn calculate_unrealized_pnl(side: bool, size: u128, entry_price_x96: u128, decre
     0
 }
 
-fn calculate_maintenance_margin(size: u128, entry_price_x96: u128, decrease_price_x96: u128, liquidation_fee_rate_per_position: u32, trading_fee_rate: u32, liquidation_execution_fee: u64) -> u128 {
-    // Placeholder implementation
-    0
-}
+
 
 fn adjust_global_funding_rate(global_position: &mut GlobalPosition, long_rate_adjustment: i128, short_rate_adjustment: i128) {
     // Adjust the global funding rates based on the provided adjustments
