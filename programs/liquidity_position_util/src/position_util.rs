@@ -250,6 +250,66 @@ pub fn change_max_size(
     global_position.max_size_per_position = max_size_per_position_after;
 }
 
+pub fn calculate_liquidation_price_x96(
+    position_margin: u128, // Assuming margin is directly passed instead of the entire position for simplicity
+    position_size: u128, // Directly pass size
+    entry_price_x96: u128, // Directly pass entry price
+    is_long: bool, // Simplify Side to a bool
+    funding_fee: i128,
+    liquidation_fee_rate: u32,
+    trading_fee_rate: u32,
+    liquidation_execution_fee: u64,
+) -> u128 { // Return type simplified to u128
+    let margin_after = if funding_fee >= 0 {
+        position_margin.wrapping_add(funding_fee as u128)
+    } else {
+        position_margin.wrapping_sub((-funding_fee) as u128)
+    };
+
+    let (numerator_x96, denominator) = if is_long {
+        ((10000 + liquidation_fee_rate) as u128, (10000 - trading_fee_rate) as u128)
+    } else {
+        ((10000 - liquidation_fee_rate) as u128, (10000 + trading_fee_rate) as u128)
+    };
+
+    let numerator_part2_x96 = if margin_after >= liquidation_execution_fee as u128 {
+        margin_after - liquidation_execution_fee as u128
+    } else {
+        liquidation_execution_fee as u128 - margin_after
+    };
+
+    let total_numerator_x96 = numerator_x96 * entry_price_x96 * position_size + numerator_part2_x96 * 10000 * (1 << 96);
+    let total_denominator = denominator * position_size;
+
+    if is_long {
+        total_numerator_x96 / total_denominator
+    } else {
+        (total_numerator_x96 + total_denominator - 1) / total_denominator // emulate ceilDiv
+    }
+}
+
+/// Validates if increasing the position size would exceed the market's size limits.
+pub fn validate_increase_size(
+    max_size_per_position: u128, // Assume these are parameters directly passed
+    max_size: u128,
+    size_before: u128,
+    size_delta: u128,
+) -> Result<u128> { // Using Result to handle errors
+    let size_after = size_before.checked_add(size_delta).ok_or_else(|| ErrorCode::Overflow)?;
+
+    if size_after > max_size_per_position {
+        return Err(error!(ErrorCode::SizeExceedsMaxSizePerPosition));
+    }
+
+    let total_size_after = size_after; // Assuming total size is calculated elsewhere or passed as a parameter
+
+    if total_size_after > max_size {
+        return Err(error!(ErrorCode::SizeExceedsMaxSize));
+    }
+
+    Ok(size_after)
+}
+
 
 
 fn build_trading_fee_state(fee_rate_cfg: &MarketFeeRateConfig, account: Pubkey , referral_token : u128 , referral_parent_token : u128) -> TradingFeeState {
@@ -307,7 +367,7 @@ pub fn increase_global_position(global_position: &mut GlobalPosition, is_long: b
     }
 }
 
-\
+
 pub fn decrease_global_position(global_position: &mut GlobalPosition, is_long: bool, size: u128) {
     if is_long {
         global_position.long_size = global_position.long_size.checked_sub(size).expect("Underflow in long size");
@@ -374,4 +434,9 @@ pub enum ErrorCode {
     Overflow,
     #[msg("Insufficient global liquidity.")]
     InsufficientGlobalLiquidity,
+    #[msg("Size Excedded")] 
+    SizeExceedsMaxSize , 
+    #[msg("Size Excedded per position ")] 
+    SizeExceedsMaxSizePerPosition , 
+
 }
