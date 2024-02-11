@@ -263,6 +263,66 @@ pub struct PriceState {
 }
 
 
+pub fn calculate_next_entry_price_x96(
+    is_long: bool,
+    size_before: u128,
+    entry_price_before_x96: u128,
+    size_delta: u128,
+    trade_price_x96: u128,
+) -> u128 {
+    if size_before == 0 && size_delta == 0 {
+        0
+    } else if size_before == 0 {
+        trade_price_x96
+    } else if size_delta == 0 {
+        entry_price_before_x96
+    } else {
+        let liquidity_after_x96 = size_before
+            .checked_mul(entry_price_before_x96)
+            .unwrap()
+            .checked_add(size_delta.checked_mul(trade_price_x96).unwrap())
+            .unwrap();
+        let size_after = size_before.checked_add(size_delta).unwrap();
+
+        if is_long {
+            ceil_div(liquidity_after_x96, size_after)
+        } else {
+            liquidity_after_x96 / size_after
+        }
+    }
+}
+
+/// Calculate the liquidity (value) of a position.
+pub fn calculate_liquidity(size: u128, price_x96: u128) -> u128 {
+    let q96   = 100 ; // change this too 
+
+    size.checked_mul(price_x96).unwrap().checked_div(q96).unwrap()
+}
+
+/// Calculate the unrealized PnL of a position based on entry price.
+pub fn calculate_unrealized_pnl(
+    is_long: bool,
+    size: u128,
+    entry_price_x96: u128,
+    price_x96: u128,
+) -> i128 {
+    let bp :u128= 100; // add when adding constanst 
+    let q96   = 100 ; // change this too 
+    if is_long {
+        if entry_price_x96 > price_x96 {
+            -(size.checked_mul(entry_price_x96 - price_x96).unwrap().checked_div(q96).unwrap() as i128)
+        } else {
+            size.checked_mul(price_x96 - entry_price_x96).unwrap().checked_div(q96).unwrap() as i128
+        }
+    } else {
+        if entry_price_x96 < price_x96 {
+            -(size.checked_mul(price_x96 - entry_price_x96).unwrap().checked_div(q96).unwrap() as i128)
+        } else {
+            size.checked_mul(entry_price_x96 - price_x96).unwrap().checked_div(q96).unwrap() as i128
+        }
+    }
+}
+
 /// Calculate the liquidation fee.
 pub fn calculate_liquidation_fee(size: u128, entry_price_x96: u128, liquidation_fee_rate: u32) -> u128 {
     let bp :u128= 100; // add when adding constanst 
@@ -449,12 +509,6 @@ fn build_trading_fee_state(fee_rate_cfg: &MarketFeeRateConfig, account: Pubkey ,
         referral_parent_return_fee_rate: fee_rate_cfg.referral_parent_return_fee_rate,
     }
 }
-
-fn calculate_unrealized_pnl(side: bool, size: u128, entry_price_x96: u128, decrease_price_x96: u128) -> i128 {
-    // Placeholder implementation
-    0
-}
-
 
 
 fn adjust_global_funding_rate(global_position: &mut GlobalPosition, long_rate_adjustment: i128, short_rate_adjustment: i128) {
