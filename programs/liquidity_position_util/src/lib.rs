@@ -1,11 +1,17 @@
 use anchor_lang::prelude::*;
 mod helper;
-
+mod math;
+mod liquidity_position_util;
+mod position_util;
+use crate::liquidity_position_util as helper_liquidity_position;
+use crate::position_util as helper_position_util;
 use crate::helper as other_helper;
+use crate::math as helper_math;
+
 declare_id!("XNiBJSgxaaUkYfX8outPevtBcmao6LV1UrTQiyJ2YJs");
 
 
-pub mod liquidity_position_util {
+pub mod liquidity_position_uti {
     use super::*;
     pub fn update_price_state(ctx: Context<UpdatePriceState>) -> Result<()> {
         // Function logic goes here
