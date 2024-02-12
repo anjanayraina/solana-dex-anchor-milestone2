@@ -2,11 +2,7 @@ use anchor_lang::prelude::*;
 
 
 
-declare_id!("XNiBJSgxaaUkYfX8outPevtBcmao6LV1UrTQiyJ2YJs");
 
-
-pub mod liquidity_position_uti {
-    use super::*;
     pub fn update_price_state(ctx: Context<UpdatePriceState>) -> Result<()> {
         // Function logic goes here
         Ok(())
@@ -20,7 +16,7 @@ pub mod liquidity_position_uti {
         let mut reaized_pnl = 0;
         if true { //  add this after all the libraries are created 
             if true{ // check for liquidity delta 0 , if yes then revert 
-
+                
             }
 
         }
@@ -105,7 +101,7 @@ pub mod liquidity_position_uti {
         Ok(())
     }
 
-}
+
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct IncreaseLiquidityPositionContext {
@@ -261,4 +257,27 @@ pub struct GlobalFundingRateSample {
 pub struct GlobalLiquidationFund {
     pub liquidation_fund: i128, // Assuming use of i128 for simplicity.
     pub liquidity: u128,
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("The margin rate is too high.")]
+    MarginRateTooHigh,
+    #[msg("The margin rate is too low.")]
+    MarginRateTooLow,
+    #[msg("Overflow occurred.")]
+    Overflow,
+    #[msg("Insufficient global liquidity.")]
+    InsufficientGlobalLiquidity,
+    #[msg("Size Excedded")] 
+    SizeExceedsMaxSize , 
+    #[msg("Size Excedded per position ")] 
+    SizeExceedsMaxSizePerPosition , 
+    #[msg("InsufficientSizeToDecrease")]
+    InsufficientSizeToDecrease , 
+    #[msg("InsufficientMargin")]
+    InsufficientMargin,
+
+
+
 }

@@ -287,23 +287,22 @@ pub fn increase_position(
     position_cache: &mut Position, 
     index : usize , 
 
-) -> Result<u128> { // Assuming this function returns the new trade price or an error
-    // Validate the side is valid (true for long, false for short in this context)
-    // Rust doesn't have a direct `.requireValid()` equivalent, validation logic should be implemented as needed
+) -> Result<u128> { 
 
+    if position_cache.size == 0 {
+        if parameter.size_delta == 0 {
+            return err!(ErrorCode::PositionNotFound);
+        }
+
+        // market util call
+    }
     let base_cfg = &market_config.base_config;
 
 
-    // Validate margin and liquidity as needed
-    // Rust does not have direct access control with `public`, `private`, you define module access
 
-    // Assuming a function to validate global liquidity exists
     validate_global_liquidity(state.global_liqudity_position.liquidity)?;
 
-    // Assuming a utility function to settle liquidity unrealized PnL
-    // settle_liquidity_unrealized_pnl(state, parameter.price_feed, parameter.market)?;
 
-    // Build trading fee state, assuming a function exists to do so
     let trading_fee_state = build_trading_fee_state(&market_config.fee_rate_config, parameter.account, 0, 0); // Placeholder for referral tokens
 
     let mut size_after = position_cache.size;
@@ -318,10 +317,10 @@ pub fn increase_position(
         )?;
 
         // Placeholder for index price calculation
-        let index_price_x96 = 0u128; // You need to implement actual price calculation based on price feed
+        let index_price_x96 = 0u128; // Market Util call 
 
         // Placeholder for trade price calculation and updating price state
-        trade_price_x96 = index_price_x96; // Simplify for the example, implement actual logic
+        trade_price_x96 = index_price_x96; 
 
         // Assuming a function to distribute fees
         trading_fee= distribute_fee(
@@ -339,10 +338,10 @@ pub fn increase_position(
     }
 
     let global_funding_growth = choose_previous_global_funding_rate_growth_x96(&state.global_position, parameter.side);
-    // Calculate funding fee, assuming this function exists
+    
     let funding_fee = calculate_funding_fee(
-        global_funding_growth, // Placeholder for global funding rate growth
-        position_cache.entry_funding_rate_growth_x96, // Placeholder for position's entry funding rate growth
+        global_funding_growth, 
+        position_cache.entry_funding_rate_growth_x96, 
         position_cache.size,
     );
 
@@ -368,7 +367,6 @@ pub fn increase_position(
 
     };
     validate_position_liquidate_maintain_margin_rate(base_cfg, &maintain_parameter );
-    // Update the position with new values 
 
     if parameter.size_delta > 0 {
         // market util call 
@@ -376,11 +374,11 @@ pub fn increase_position(
     }
 
     let position: &mut Position = state.positions.get_mut(index).unwrap();
+    position.margin = margin_after as u128;
     position.size = size_after;
     position_cache.entry_price_x96 = entry_price_after_x96;
     position_cache.entry_funding_rate_growth_x96 = 0; // Placeholder for actual update
 
-    // You will need to handle events or logging according to your application's requirements
 
     Ok(trade_price_x96) // Return the trade price
 }
@@ -949,6 +947,8 @@ pub enum ErrorCode {
     InsufficientSizeToDecrease , 
     #[msg("InsufficientMargin")]
     InsufficientMargin,
+    #[msg("Invalid Position")]
+    PositionNotFound ,
 
 
 
