@@ -443,91 +443,93 @@ pub fn decrease_position(
     position.margin = margin_after as u128;
 
     // If the position size after decrease is zero, handle logic to delete the position from state
-    if size_after == 0 {
+    if size_after > 0 {
+        // calls to marketutil and other libraries 
+    }
+
+    else {
         // Logic to delete the position or mark it as closed
     }
 
     // Adjust global position
+    if parameter.size_delta > 0 {
     decrease_global_position(&mut state.global_position, parameter.side, parameter.size_delta);
-
-    // Assuming trade_price_x96 will be calculated or fetched from elsewhere. For now, return placeholder value
-    Ok((0, margin_after as u128))
+    }
+    
+    Ok((0, margin_after as u128)) // placeholder values 
 }
 
 pub fn liquidate_position(
-    state: &mut State, // Assuming State includes all necessary components.
-    market_cfg: &MarketConfig, // Assuming MarketConfig includes necessary configurations.
-    position_cache: &Position, // Assuming this is a snapshot of the position to be liquidated.
-    trading_fee_state: &TradingFeeState, // Includes trading fee configurations.
-    parameter: &LiquidateParameter, // Parameters for liquidation.
-
-) {
-    let base_cfg = &market_cfg.base_config;
+    state: &mut State,
+    market_config: &MarketConfig,
+    position: &mut Position, // Assuming this is a mutable reference to the position to be liquidated
+    trading_fee_state: &TradingFeeState,
+    parameter: &LiquidateParameter,
+) -> Result<()> {
+    let base_cfg = &market_config.base_config;
     let liquidation_execution_fee = base_cfg.liquidation_execution_fee;
     let liquidation_fee_rate = base_cfg.liquidation_fee_rate_per_position;
 
-    // let (liquidation_price_x96, adjusted_funding_fee) = calculate_liquidation_price_x96(
-    //     // Assuming a function that calculates the liquidation price.
-    //     position_cache.margin,
-    //     position_cache.size, position_cache.entry_price_x96,
-    //     parameter.side,
-    //     parameter.required_funding_fee,
-    //     liquidation_fee_rate,
-    //     trading_fee_state.trading_fee_rate,
-    //     liquidation_execution_fee,
-    // );
+    // Calculate the liquidation price and adjusted funding fee
+    let (liquidation_price_x96, adjusted_funding_fee) = calculate_liquidation_price_x96(
+        position,
+        &state.global_position,
+        parameter.side,
+        parameter.required_funding_fee,
+        liquidation_fee_rate,
+        trading_fee_state.trading_fee_rate,
+        liquidation_execution_fee,
+    );
 
-    // let liquidation_fee = calculate_liquidation_fee(
-    //     // Assuming a function that calculates the liquidation fee.
-    //     position_cache.size,
-    //     position_cache.entry_price_x96,
-    //     liquidation_fee_rate,
-    // );
+    // Calculate the liquidation fee
+    let liquidation_fee = calculate_liquidation_fee(
+        position.size,
+        position.entry_price_x96,
+        liquidation_fee_rate,
+    );
+    let mut liquidation_fund_delta = liquidation_fee as i128;
 
-    // let mut liquidation_fund_delta = liquidation_fee as i128;
+    // Adjust the funding rate by liquidation if needed
+    if parameter.required_funding_fee != adjusted_funding_fee {
+        liquidation_fund_delta += adjust_funding_rate_by_liquidation(
+            &mut state.global_position,
+            parameter.side,
+            parameter.required_funding_fee,
+            adjusted_funding_fee,
+        );
+    }
 
-    // if parameter.required_funding_fee != adjusted_funding_fee {
-    //     liquidation_fund_delta += adjust_funding_rate_by_liquidation(
-    //         // Assuming a function that adjusts the funding rate by liquidation.
-    //         &mut state.global_position,
-    //         parameter.is_long,
-    //         parameter.required_funding_fee,
-    //         adjusted_funding_fee,
-    //     );
-    // }
+    // Calculate the difference if the liquidation price differs from the trade price
+    liquidation_fund_delta += calculate_unrealized_pnl(
+        parameter.side,
+        position.size,
+        liquidation_price_x96,
+        parameter.trade_price_x96,
+    );
 
-    // liquidation_fund_delta += calculate_unrealized_pnl(
-    //     // Assuming a function that calculates unrealized PnL.
-    //     parameter.is_long,
-    //     position_cache.size,
-    //     liquidation_price_x96,
-    //     parameter.trade_price_x96,
-    // );
+    // Distribute the fee
+    let trading_fee = distribute_fee(
+        &market_config.fee_rate_config,
+        &DistributeFeeParameter {
+            market: parameter.market,
+            account: parameter.account,
+            size_delta: position.size, // Assuming the entire position size is liquidated
+            trade_price_x96: liquidation_price_x96,
+            trading_fee_state: trading_fee_state.clone(),
+            liquidation_fee: liquidation_fund_delta,
+        },
+        state,
+    );
 
-    // let trading_fee = distribute_fee(
-    //     // Assuming a function that distributes fees.
-    //     &mut state.global_liquidity_position,
-    //     &market_cfg.fee_rate_config,
-    //     &DistributeFeeParameter {
-    //         market: parameter.market,
-    //         account: parameter.account,
-    //         size_delta: position_cache.size,
-    //         trade_price_x96: liquidation_price_x96,
-    //         trading_fee_state: trading_fee_state.clone(),
-    //         liquidation_fee: liquidation_fund_delta,
-    //     },
-    // );
+    // Decrease the global position
+    decrease_global_position(&mut state.global_position, parameter.side, position.size);
 
-    // decrease_global_position(
-    //     // Assuming a function that decreases the global position.
-    //     &mut state.global_position,
-    //     parameter.is_long,
-    //     position_cache.size,
-    // );
+    // Logic to "delete" the position. In Rust, you would typically remove the position from a collection or reset its fields.
+    // This step depends on how you're tracking positions within `State`.
 
-    // Logic to delete the position from state. Depending on how positions are stored, this might involve removing an entry from a map.
-
-    // Emit an event for position liquidation. In Rust/Anchor, you might log this event or handle it as per your application's requirements.
+    // Example of resetting the position fields if positions are stored in a vector or similar collection
+    // delete the position 
+    Ok(())
 }
 
 
