@@ -243,7 +243,8 @@ pub struct State {
     pub protocol_fee: u128,
     pub liquidity_positions : Vec<AccountToLiquidity> , 
     pub global_liqudity_position : GlobalLiquidityPosition,
-    pub global_position : GlobalPosition
+    pub global_position : GlobalPosition,
+    pub positions : Vec<Position> 
 }
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 
@@ -284,6 +285,7 @@ pub fn increase_position(
     market_config: &MarketConfig, 
     parameter: &IncreasePositionParameter,
     position_cache: &mut Position, 
+    index : usize , 
 
 ) -> Result<u128> { // Assuming this function returns the new trade price or an error
     // Validate the side is valid (true for long, false for short in this context)
@@ -372,7 +374,9 @@ pub fn increase_position(
         // market util call 
         increase_global_position(&mut state.global_position, parameter.side , parameter.size_delta);
     }
-    position_cache.size = size_after;
+
+    let position: &mut Position = state.positions.get_mut(index).unwrap();
+    position.size = size_after;
     position_cache.entry_price_x96 = entry_price_after_x96;
     position_cache.entry_funding_rate_growth_x96 = 0; // Placeholder for actual update
 
@@ -380,7 +384,72 @@ pub fn increase_position(
 
     Ok(trade_price_x96) // Return the trade price
 }
+pub fn decrease_position(
+    state: &mut State,
+    market_config: &MarketConfig,
+    parameter: &DecreasePositionParameter,
+    position: &mut Position,
+) -> Result<(u128, u128)> {
+    // Validate position size before proceeding
+    if position.size < parameter.size_delta {
+        return Err(error!(ErrorCode::InsufficientSizeToDecrease));
+    }
 
+    // Placeholder for settle liquidity unrealized PnL and decrease index price calculation
+    // Assume these functionalities are implemented elsewhere in the program
+    let trading_fee_state = build_trading_fee_state(&market_config.fee_rate_config, parameter.account, 0, 0); // Placeholder for referral tokens
+
+    let global_funding_rate_growth_x96 = choose_previous_global_funding_rate_growth_x96(&state.global_position, parameter.side);
+    let funding_fee = calculate_funding_fee(
+        global_funding_rate_growth_x96,
+        position.entry_funding_rate_growth_x96,
+        position.size,
+    );
+    let trade_price_x96 = 100; // place holder for the PriceUtil call 
+   let  trading_fee= distribute_fee(
+        &market_config.fee_rate_config, 
+        &DistributeFeeParameter {
+            market: parameter.market,
+            account: parameter.account,
+            size_delta: parameter.size_delta,
+            trade_price_x96,
+            trading_fee_state: trading_fee_state.clone(),
+            liquidation_fee: 0,
+        },
+        state
+    );
+
+    // Calculate unrealized PnL delta based on the size decrease
+    let realized_pnl_delta = calculate_unrealized_pnl(
+        parameter.side,
+        parameter.size_delta,
+        position.entry_price_x96,
+        0, // Placeholder for current price, assuming this will be calculated or provided
+    );
+
+    // Adjust the position's margin based on the PnL, funding fee, trading fee, and margin delta
+    let margin_after = (position.margin as i128) + realized_pnl_delta + funding_fee - (trading_fee as i128) - (parameter.margin_delta as i128);
+    if margin_after < 0 {
+        return Err(error!(ErrorCode::InsufficientMargin));
+    }
+
+    let size_after = position.size - parameter.size_delta;
+
+    // Update position's size and margin
+    position.size = size_after;
+    position.margin = margin_after as u128;
+
+    // If the position size after decrease is zero, handle logic to delete the position from state
+    if size_after == 0 {
+        // Logic to delete the position or mark it as closed
+    }
+
+    // Adjust global position
+    decrease_global_position(&mut state.global_position, parameter.side, parameter.size_delta);
+
+    // Assuming trade_price_x96 will be calculated or fetched from elsewhere. For now, return placeholder value
+    Ok((0, margin_after as u128))
+}
 
 pub fn liquidate_position(
     state: &mut State, // Assuming State includes all necessary components.
@@ -871,5 +940,11 @@ pub enum ErrorCode {
     SizeExceedsMaxSize , 
     #[msg("Size Excedded per position ")] 
     SizeExceedsMaxSizePerPosition , 
+    #[msg("InsufficientSizeToDecrease")]
+    InsufficientSizeToDecrease , 
+    #[msg("InsufficientMargin")]
+    InsufficientMargin,
+
+
 
 }
