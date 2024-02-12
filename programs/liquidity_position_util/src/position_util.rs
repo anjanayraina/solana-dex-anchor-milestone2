@@ -183,6 +183,7 @@ pub struct MarketPriceConfig {
 pub struct GlobalLiquidityPosition {
     pub net_size: u128,
     pub liquidation_buffer_net_size: u128,
+    pub max_size : u128,
     // Assuming previousSPPriceX96 can be represented as u128 for simplicity,
     // but you may need to handle fixed-point arithmetic separately.
     pub previous_sp_price_x96: u128,
@@ -242,7 +243,7 @@ pub struct State {
     pub protocol_fee: u128,
     pub liquidity_positions : Vec<AccountToLiquidity> , 
     pub global_liqudity_position : GlobalLiquidityPosition,
-
+    pub global_position : GlobalPosition
 }
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 
@@ -279,51 +280,106 @@ pub fn change_max_size(
 }
 
 pub fn increase_position(
-    state : &mut State , 
+    state: &mut State, 
+    market_config: &MarketConfig, 
     parameter: &IncreasePositionParameter,
-    global_position: &mut GlobalPosition, // Assuming this is mutable to reflect changes
-    market_base_config: &MarketConfig, // Assuming market configurations are passed here
-    position_cache: &mut Position, // Assuming this is mutable to reflect changes
-    referral_token : u128,
-    referral_parent_token : u128,
-    account : Pubkey 
-    // Assuming other necessary parameters are passed here
-) -> Result<u128> { // Assuming function returns the new trade price or an error
-    // Implementation details...
+    position_cache: &mut Position, 
 
-    // Example logic based on the provided details:
-    if position_cache.size == 0 && parameter.size_delta == 0 {
-        // Handle the case where the position does not exist and no size delta is provided
-    }
+) -> Result<u128> { // Assuming this function returns the new trade price or an error
+    // Validate the side is valid (true for long, false for short in this context)
+    // Rust doesn't have a direct `.requireValid()` equivalent, validation logic should be implemented as needed
 
-    // Validate and calculate trading fee, funding fee, etc., based on provided parameters
-    validate_global_liquidity(state.global_liqudity_position.liquidity);
-    // market util call 
+    let base_cfg = &market_config.base_config;
 
 
-    // Placeholder logic for fee calculations and validations
-    let mut trading_fee = 0; // Placeholder for actual trading fee calculation
-    let funding_fee = 0; // Placeholder for actual funding fee calculation
+    // Validate margin and liquidity as needed
+    // Rust does not have direct access control with `public`, `private`, you define module access
 
-    // Calculate new size after the increase, handle potential overflow or validation errors
-    let new_size = position_cache.size.checked_add(parameter.size_delta).unwrap();
+    // Assuming a function to validate global liquidity exists
+    validate_global_liquidity(state.global_liqudity_position.liquidity)?;
 
-    // Update the global position, market configurations, and position cache as necessary
-    global_position.long_size = if parameter.side { global_position.long_size.checked_add(parameter.size_delta).expect("Overflow in long size") } else { global_position.long_size };
+    // Assuming a utility function to settle liquidity unrealized PnL
+    // settle_liquidity_unrealized_pnl(state, parameter.price_feed, parameter.market)?;
 
-    // Placeholder for updating the position cache with new values
-    position_cache.size = new_size;
-    // Placeholder for calculating the new entry price and updating the position cache
-    position_cache.entry_price_x96 = 0; // Placeholder for actual entry price calculation
-    let mut size_after =position_cache.size;
-    let trading_fee_state = build_trading_fee_state(&market_base_config.fee_rate_config, account, referral_token, referral_parent_token);
+    // Build trading fee state, assuming a function exists to do so
+    let trading_fee_state = build_trading_fee_state(&market_config.fee_rate_config, parameter.account, 0, 0); // Placeholder for referral tokens
+
+    let mut size_after = position_cache.size;
+    let mut trade_price_x96 = 0u128; // Placeholder for actual trade price calculation
+    let mut trading_fee :u128= 0;
     if parameter.size_delta > 0 {
-        size_after = validate_increase_size(global_position.max_size_per_position, global_position.max_size, new_size, parameter.size_delta).unwrap();
-        //market util call 
-        //price util call 
-        // trading_fee = distribute_fee()
+        size_after = validate_increase_size(
+            state.global_liqudity_position.net_size, 
+            state.global_liqudity_position.max_size, 
+            position_cache.size, 
+            parameter.size_delta,
+        )?;
 
+        // Placeholder for index price calculation
+        let index_price_x96 = 0u128; // You need to implement actual price calculation based on price feed
+
+        // Placeholder for trade price calculation and updating price state
+        trade_price_x96 = index_price_x96; // Simplify for the example, implement actual logic
+
+        // Assuming a function to distribute fees
+        trading_fee= distribute_fee(
+            &market_config.fee_rate_config, 
+            &DistributeFeeParameter {
+                market: parameter.market,
+                account: parameter.account,
+                size_delta: parameter.size_delta,
+                trade_price_x96,
+                trading_fee_state: trading_fee_state.clone(),
+                liquidation_fee: 0,
+            },
+            state
+        );
     }
+
+    let global_funding_growth = choose_previous_global_funding_rate_growth_x96(&state.global_position, parameter.side);
+    // Calculate funding fee, assuming this function exists
+    let funding_fee = calculate_funding_fee(
+        global_funding_growth, // Placeholder for global funding rate growth
+        position_cache.entry_funding_rate_growth_x96, // Placeholder for position's entry funding rate growth
+        position_cache.size,
+    );
+
+    let margin_after = position_cache.margin as i128 + parameter.margin_delta as i128 + funding_fee - trading_fee as i128;
+
+    // Calculate the new entry price
+    let entry_price_after_x96 = calculate_next_entry_price_x96(
+        parameter.side,
+        position_cache.size,
+        position_cache.entry_price_x96,
+        parameter.size_delta,
+        trade_price_x96,
+    );
+
+    let maintain_parameter: MaintainMarginRateParameter = MaintainMarginRateParameter{
+        margin : margin_after , 
+        side : parameter.side ,
+        size : size_after , 
+        entry_price_x96 : entry_price_after_x96 , 
+        decrease_price_x96 : 0, // place holder to add market util 
+        trading_fee_rate : trading_fee_state.trading_fee_rate , 
+        liquidatable_position : false , 
+
+    };
+    validate_position_liquidate_maintain_margin_rate(base_cfg, &maintain_parameter );
+    // Update the position with new values 
+
+    if parameter.size_delta > 0 {
+        // market util call 
+        increase_global_position(&mut state.global_position, parameter.side , parameter.size_delta);
+    }
+    position_cache.size = size_after;
+    position_cache.entry_price_x96 = entry_price_after_x96;
+    position_cache.entry_funding_rate_growth_x96 = 0; // Placeholder for actual update
+
+    // You will need to handle events or logging according to your application's requirements
+
+    Ok(trade_price_x96) // Return the trade price
+}
 
 
 pub fn liquidate_position(
@@ -338,64 +394,64 @@ pub fn liquidate_position(
     let liquidation_execution_fee = base_cfg.liquidation_execution_fee;
     let liquidation_fee_rate = base_cfg.liquidation_fee_rate_per_position;
 
-    let (liquidation_price_x96, adjusted_funding_fee) = calculate_liquidation_price_x96(
-        // Assuming a function that calculates the liquidation price.
-        position_cache.margin,
-        position_cache.size, position_cache.entry_price_x96,
-        parameter.side,
-        liquidation_fee_rate,
-        liquidation_fee_rate,
-        trading_fee_state.trading_fee_rate,
-        liquidation_execution_fee,
-    );
+    // let (liquidation_price_x96, adjusted_funding_fee) = calculate_liquidation_price_x96(
+    //     // Assuming a function that calculates the liquidation price.
+    //     position_cache.margin,
+    //     position_cache.size, position_cache.entry_price_x96,
+    //     parameter.side,
+    //     parameter.required_funding_fee,
+    //     liquidation_fee_rate,
+    //     trading_fee_state.trading_fee_rate,
+    //     liquidation_execution_fee,
+    // );
 
-    let liquidation_fee = calculate_liquidation_fee(
-        // Assuming a function that calculates the liquidation fee.
-        position_cache.size,
-        position_cache.entry_price_x96,
-        liquidation_fee_rate,
-    );
+    // let liquidation_fee = calculate_liquidation_fee(
+    //     // Assuming a function that calculates the liquidation fee.
+    //     position_cache.size,
+    //     position_cache.entry_price_x96,
+    //     liquidation_fee_rate,
+    // );
 
-    let mut liquidation_fund_delta = liquidation_fee as i128;
+    // let mut liquidation_fund_delta = liquidation_fee as i128;
 
-    if parameter.required_funding_fee != adjusted_funding_fee {
-        liquidation_fund_delta += adjust_funding_rate_by_liquidation(
-            // Assuming a function that adjusts the funding rate by liquidation.
-            &mut state.global_position,
-            parameter.is_long,
-            parameter.required_funding_fee,
-            adjusted_funding_fee,
-        );
-    }
+    // if parameter.required_funding_fee != adjusted_funding_fee {
+    //     liquidation_fund_delta += adjust_funding_rate_by_liquidation(
+    //         // Assuming a function that adjusts the funding rate by liquidation.
+    //         &mut state.global_position,
+    //         parameter.is_long,
+    //         parameter.required_funding_fee,
+    //         adjusted_funding_fee,
+    //     );
+    // }
 
-    liquidation_fund_delta += calculate_unrealized_pnl(
-        // Assuming a function that calculates unrealized PnL.
-        parameter.is_long,
-        position_cache.size,
-        liquidation_price_x96,
-        parameter.trade_price_x96,
-    );
+    // liquidation_fund_delta += calculate_unrealized_pnl(
+    //     // Assuming a function that calculates unrealized PnL.
+    //     parameter.is_long,
+    //     position_cache.size,
+    //     liquidation_price_x96,
+    //     parameter.trade_price_x96,
+    // );
 
-    let trading_fee = distribute_fee(
-        // Assuming a function that distributes fees.
-        &mut state.global_liquidity_position,
-        &market_cfg.fee_rate_config,
-        &DistributeFeeParameter {
-            market: parameter.market,
-            account: parameter.account,
-            size_delta: position_cache.size,
-            trade_price_x96: liquidation_price_x96,
-            trading_fee_state: trading_fee_state.clone(),
-            liquidation_fee: liquidation_fund_delta,
-        },
-    );
+    // let trading_fee = distribute_fee(
+    //     // Assuming a function that distributes fees.
+    //     &mut state.global_liquidity_position,
+    //     &market_cfg.fee_rate_config,
+    //     &DistributeFeeParameter {
+    //         market: parameter.market,
+    //         account: parameter.account,
+    //         size_delta: position_cache.size,
+    //         trade_price_x96: liquidation_price_x96,
+    //         trading_fee_state: trading_fee_state.clone(),
+    //         liquidation_fee: liquidation_fund_delta,
+    //     },
+    // );
 
-    decrease_global_position(
-        // Assuming a function that decreases the global position.
-        &mut state.global_position,
-        parameter.is_long,
-        position_cache.size,
-    );
+    // decrease_global_position(
+    //     // Assuming a function that decreases the global position.
+    //     &mut state.global_position,
+    //     parameter.is_long,
+    //     position_cache.size,
+    // );
 
     // Logic to delete the position from state. Depending on how positions are stored, this might involve removing an entry from a map.
 
@@ -403,8 +459,75 @@ pub fn liquidate_position(
 }
 
 
-    Ok(0) // Placeholder for returning the new trade price
+fn calculate_liquidation_price_x96(
+    position: &Position,
+    global_funding_rate: &GlobalPosition,
+    is_long: bool,
+    funding_fee: i128,
+    liquidation_fee_rate: u32,
+    trading_fee_rate: u32,
+    liquidation_execution_fee: u64,
+) -> (u128, i128) {
+    // Assuming margin is stored as u128 in Position
+    let margin_int256 = position.margin as i128 + funding_fee;
+
+    // Adjusted funding fee, initialized to the input funding fee
+    let mut adjusted_funding_fee = funding_fee;
+
+    // Placeholder for liquidation price calculation
+    let mut liquidation_price_x96: u128 = 0;
+
+    if margin_int256 > 0 {
+        // Placeholder logic for calculating the liquidation price
+        // This should be replaced with the actual logic based on your application's needs
+        liquidation_price_x96 = _calculate_liquidation_price_x96(
+            position.margin,
+            position.size,
+            position.entry_price_x96,
+            is_long,
+            funding_fee,
+            liquidation_fee_rate,
+            trading_fee_rate,
+            liquidation_execution_fee,
+        );
+
+        // Assuming a function to check if the liquidation price is acceptable
+        if is_acceptable_liquidation_price_x96(
+            is_long,
+            liquidation_price_x96,
+            position.entry_price_x96,
+        ) {
+            return (liquidation_price_x96, funding_fee);
+        }
+    }
+
+    // Placeholder logic to adjust the funding fee based on previous global funding rate
+    // This should involve calculating a new funding fee based on the difference in funding rates
+    // and the position size, similar to the Solidity logic
+
+    adjusted_funding_fee = calculate_funding_fee(
+        choose_previous_global_funding_rate_growth_x96(global_funding_rate, is_long),
+        position.entry_funding_rate_growth_x96,
+        position.size,
+    );
+
+    // Recalculate liquidation price with adjusted funding fee
+    liquidation_price_x96 = _calculate_liquidation_price_x96(
+        position.margin,
+        position.size,
+        position.entry_price_x96,
+        is_long,
+        adjusted_funding_fee,
+        liquidation_fee_rate,
+        trading_fee_rate,
+        liquidation_execution_fee,
+    );
+
+    // Return the calculated liquidation price and adjusted funding fee
+    (liquidation_price_x96, adjusted_funding_fee)
 }
+
+
 
 pub fn distribute_fee(
 
@@ -549,7 +672,7 @@ pub fn split_fee(trading_fee: u128, fee_rate: u32) -> u128 {
 
 /// Chooses the previous global funding rate growth based on the position side.
 pub fn choose_previous_global_funding_rate_growth_x96(
-    previous_global_funding_rate: &PreviousGlobalFundingRate,
+    previous_global_funding_rate: &GlobalPosition,
     is_long: bool,
 ) -> i128 { // Assuming simplified usage of i128 to represent fixed-point numbers
     if is_long {
@@ -569,7 +692,7 @@ pub fn is_acceptable_liquidation_price_x96(
 }
 
 
-pub fn calculate_liquidation_price_x96(
+pub fn _calculate_liquidation_price_x96(
     position_margin: u128, // Assuming margin is directly passed instead of the entire position for simplicity
     position_size: u128, // Directly pass size
     entry_price_x96: u128, // Directly pass entry price
