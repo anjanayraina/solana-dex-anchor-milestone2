@@ -397,16 +397,15 @@ pub fn decrease_position(
 
     // Placeholder for settle liquidity unrealized PnL and decrease index price calculation
     // Assume these functionalities are implemented elsewhere in the program
-    let trading_fee_state = build_trading_fee_state(&market_config.fee_rate_config, parameter.account, 0, 0); // Placeholder for referral tokens
-
+    let mut trading_fee_state = build_trading_fee_state(&market_config.fee_rate_config, parameter.account, 0, 0); // Placeholder for referral tokens
+    let mut trade_price_x96 = 100;
     let global_funding_rate_growth_x96 = choose_previous_global_funding_rate_growth_x96(&state.global_position, parameter.side);
-    let funding_fee = calculate_funding_fee(
-        global_funding_rate_growth_x96,
-        position.entry_funding_rate_growth_x96,
-        position.size,
-    );
-    let trade_price_x96 = 100; // place holder for the PriceUtil call 
-   let  trading_fee= distribute_fee(
+    let mut trading_fee = 100;
+    let mut funding_fee  = 100;
+    let mut realized_pnl_delta = 100;
+    if parameter.size_delta > 0 {
+    trade_price_x96 = 100; // place holder for the PriceUtil call 
+   trading_fee= distribute_fee(
         &market_config.fee_rate_config, 
         &DistributeFeeParameter {
             market: parameter.market,
@@ -418,15 +417,19 @@ pub fn decrease_position(
         },
         state
     );
-
+     funding_fee = calculate_funding_fee(
+        global_funding_rate_growth_x96,
+        position.entry_funding_rate_growth_x96,
+        position.size,
+    );
     // Calculate unrealized PnL delta based on the size decrease
-    let realized_pnl_delta = calculate_unrealized_pnl(
+    realized_pnl_delta = calculate_unrealized_pnl(
         parameter.side,
         parameter.size_delta,
         position.entry_price_x96,
         0, // Placeholder for current price, assuming this will be calculated or provided
     );
-
+    }
     // Adjust the position's margin based on the PnL, funding fee, trading fee, and margin delta
     let margin_after = (position.margin as i128) + realized_pnl_delta + funding_fee - (trading_fee as i128) - (parameter.margin_delta as i128);
     if margin_after < 0 {
