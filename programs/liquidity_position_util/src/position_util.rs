@@ -323,17 +323,18 @@ pub fn increase_position(
         trade_price_x96 = index_price_x96; 
 
         // Assuming a function to distribute fees
-        trading_fee= distribute_fee(
-            &market_config.fee_rate_config, 
-            &DistributeFeeParameter {
-                market: parameter.market,
-                account: parameter.account,
-                size_delta: parameter.size_delta,
-                trade_price_x96,
-                trading_fee_state: trading_fee_state.clone(),
-                liquidation_fee: 0,
-            },
-            state
+        let fee_param = &DistributeFeeParameter {
+            market: parameter.market,
+            account: parameter.account,
+            size_delta: parameter.size_delta,
+            trade_price_x96: trade_price_x96,
+            trading_fee_state: trading_fee_state.clone(),
+            liquidation_fee: 0,
+        };
+        let trading_fee = distribute_fee(
+            &mut state.global_liqudity_position,
+            &market_config.fee_rate_config , 
+            fee_param
         );
     }
 
@@ -380,7 +381,7 @@ pub fn increase_position(
     position_cache.entry_funding_rate_growth_x96 = 0; // Placeholder for actual update
 
 
-    Ok(trade_price_x96) // Return the trade price
+    Ok(trade_price_x96) 
 }
 pub fn decrease_position(
     state: &mut State,
@@ -389,12 +390,18 @@ pub fn decrease_position(
     position: &mut Position,
 ) -> Result<(u128, u128)> {
     // Validate position size before proceeding
+
+    if  position.size == 0 {
+        return Err(
+        error!(ErrorCode::PositionNotFound)
+        );
+    }
     if position.size < parameter.size_delta {
         return Err(error!(ErrorCode::InsufficientSizeToDecrease));
     }
 
     // Placeholder for settle liquidity unrealized PnL and decrease index price calculation
-    // Assume these functionalities are implemented elsewhere in the program
+
     let mut trading_fee_state = build_trading_fee_state(&market_config.fee_rate_config, parameter.account, 0, 0); // Placeholder for referral tokens
     let mut trade_price_x96 = 100;
     let global_funding_rate_growth_x96 = choose_previous_global_funding_rate_growth_x96(&state.global_position, parameter.side);
@@ -403,17 +410,18 @@ pub fn decrease_position(
     let mut realized_pnl_delta = 100;
     if parameter.size_delta > 0 {
     trade_price_x96 = 100; // place holder for the PriceUtil call 
-   trading_fee= distribute_fee(
-        &market_config.fee_rate_config, 
-        &DistributeFeeParameter {
-            market: parameter.market,
-            account: parameter.account,
-            size_delta: parameter.size_delta,
-            trade_price_x96,
-            trading_fee_state: trading_fee_state.clone(),
-            liquidation_fee: 0,
-        },
-        state
+    let fee_param = &DistributeFeeParameter {
+        market: parameter.market,
+        account: parameter.account,
+        size_delta: position.size,
+        trade_price_x96: trade_price_x96,
+        trading_fee_state: trading_fee_state.clone(),
+        liquidation_fee: 0,
+    };
+    let trading_fee = distribute_fee(
+        &mut state.global_liqudity_position,
+        &market_config.fee_rate_config , 
+        fee_param
     );
      funding_fee = calculate_funding_fee(
         global_funding_rate_growth_x96,
@@ -428,7 +436,6 @@ pub fn decrease_position(
         0, // Placeholder for current price, assuming this will be calculated or provided
     );
     }
-    // Adjust the position's margin based on the PnL, funding fee, trading fee, and margin delta
     let margin_after = (position.margin as i128) + realized_pnl_delta + funding_fee - (trading_fee as i128) - (parameter.margin_delta as i128);
     if margin_after < 0 {
         return Err(error!(ErrorCode::InsufficientMargin));
@@ -437,10 +444,8 @@ pub fn decrease_position(
     let size_after = position.size - parameter.size_delta;
 
     // Update position's size and margin
-    position.size = size_after;
-    position.margin = margin_after as u128;
+ 
 
-    // If the position size after decrease is zero, handle logic to delete the position from state
     if size_after > 0 {
         // calls to marketutil and other libraries 
     }
@@ -453,6 +458,9 @@ pub fn decrease_position(
     if parameter.size_delta > 0 {
     decrease_global_position(&mut state.global_position, parameter.side, parameter.size_delta);
     }
+    position.size = size_after;
+    position.margin = margin_after as u128;
+    position.entry_funding_rate_growth_x96 = global_funding_rate_growth_x96;
     
     Ok((0, margin_after as u128)) // placeholder values 
 }
@@ -460,15 +468,17 @@ pub fn decrease_position(
 pub fn liquidate_position(
     state: &mut State,
     market_config: &MarketConfig,
-    position: &mut Position, // Assuming this is a mutable reference to the position to be liquidated
+    position: &mut Position, 
     trading_fee_state: &TradingFeeState,
     parameter: &LiquidateParameter,
 ) -> Result<()> {
+    if position.size == 0 {
+        return err!(ErrorCode::PositionNotFound);
+    }
     let base_cfg = &market_config.base_config;
     let liquidation_execution_fee = base_cfg.liquidation_execution_fee;
     let liquidation_fee_rate = base_cfg.liquidation_fee_rate_per_position;
 
-    // Calculate the liquidation price and adjusted funding fee
     let (liquidation_price_x96, adjusted_funding_fee) = calculate_liquidation_price_x96(
         position,
         &state.global_position,
@@ -479,7 +489,6 @@ pub fn liquidate_position(
         liquidation_execution_fee,
     );
 
-    // Calculate the liquidation fee
     let liquidation_fee = calculate_liquidation_fee(
         position.size,
         position.entry_price_x96,
@@ -488,6 +497,7 @@ pub fn liquidate_position(
     let mut liquidation_fund_delta = liquidation_fee as i128;
 
     // Adjust the funding rate by liquidation if needed
+
     if parameter.required_funding_fee != adjusted_funding_fee {
         liquidation_fund_delta += adjust_funding_rate_by_liquidation(
             &mut state.global_position,
@@ -506,32 +516,33 @@ pub fn liquidate_position(
     );
 
     // Distribute the fee
+    // global_liquidity_position: &mut GlobalLiquidityPosition,
+    // fee_rate_cfg: &MarketFeeRateConfig,
+    // parameter: &DistributeFeeParameter,
+    let fee_param = &DistributeFeeParameter {
+        market: parameter.market,
+        account: parameter.account,
+        size_delta: position.size,
+        trade_price_x96: liquidation_price_x96,
+        trading_fee_state: trading_fee_state.clone(),
+        liquidation_fee: liquidation_fund_delta,
+    };
     let trading_fee = distribute_fee(
-        &market_config.fee_rate_config,
-        &DistributeFeeParameter {
-            market: parameter.market,
-            account: parameter.account,
-            size_delta: position.size, // Assuming the entire position size is liquidated
-            trade_price_x96: liquidation_price_x96,
-            trading_fee_state: trading_fee_state.clone(),
-            liquidation_fee: liquidation_fund_delta,
-        },
-        state,
+        &mut state.global_liqudity_position,
+        &market_config.fee_rate_config , 
+        fee_param
     );
 
     // Decrease the global position
     decrease_global_position(&mut state.global_position, parameter.side, position.size);
 
-    // Logic to "delete" the position. In Rust, you would typically remove the position from a collection or reset its fields.
-    // This step depends on how you're tracking positions within `State`.
 
-    // Example of resetting the position fields if positions are stored in a vector or similar collection
-    // delete the position 
+    // add delete the position 
     Ok(())
 }
 
 
-fn calculate_liquidation_price_x96(
+pub fn calculate_liquidation_price_x96(
     position: &Position,
     global_funding_rate: &GlobalPosition,
     is_long: bool,
@@ -602,18 +613,31 @@ fn calculate_liquidation_price_x96(
 
 
 pub fn distribute_fee(
-
+    global_liquidity_position: &mut GlobalLiquidityPosition,
     fee_rate_cfg: &MarketFeeRateConfig,
     parameter: &DistributeFeeParameter,
-    state : &State
 ) -> u128 {
-    // Calculate the trading fee based on the transaction size and the trading fee rate.
-    let trading_fee = calculate_trading_fee(parameter.size_delta, parameter.trade_price_x96, parameter.trading_fee_state.trading_fee_rate);
+    let trading_fee = calculate_trading_fee(parameter.size_delta, parameter.trade_price_x96, fee_rate_cfg.trading_fee_rate);
 
+    let liquidity_fee = 0; // Placeholder for liquidity fee calculation logic
+
+    if trading_fee == 0 && parameter.liquidation_fee == 0 {
+        return 0;
+    }
+
+    // Example logic for updating global liquidity position based on liquidation fee
+    // This is a simplified example; actual logic will depend on your application's requirements
+    if parameter.liquidation_fee != 0 {
+        let liquidation_fund_after = parameter.liquidation_fee; 
+    }
+
+    // Update global liquidity position's unrealized PnL growth
+    let unrealized_pnl_growth_after_x64 = global_liquidity_position.unrealized_pnl_growth_x64 +
+       ( ((liquidity_fee as u128) << 64) as i128) / ( global_liquidity_position.liquidity as i128) ;
+    global_liquidity_position.unrealized_pnl_growth_x64 = unrealized_pnl_growth_after_x64;
 
     trading_fee
 }
-
 pub fn calculate_next_entry_price_x96(
     is_long: bool,
     size_before: u128,
@@ -622,11 +646,11 @@ pub fn calculate_next_entry_price_x96(
     trade_price_x96: u128,
 ) -> u128 {
     if size_before == 0 && size_delta == 0 {
-        0
+        return 0
     } else if size_before == 0 {
-        trade_price_x96
+        return trade_price_x96
     } else if size_delta == 0 {
-        entry_price_before_x96
+        return entry_price_before_x96
     } else {
         let liquidity_after_x96 = size_before
             .checked_mul(entry_price_before_x96)
@@ -636,9 +660,9 @@ pub fn calculate_next_entry_price_x96(
         let size_after = size_before.checked_add(size_delta).unwrap();
 
         if is_long {
-            ceil_div(liquidity_after_x96, size_after)
+            return ceil_div(liquidity_after_x96, size_after)
         } else {
-            liquidity_after_x96 / size_after
+            return liquidity_after_x96 / size_after
         }
     }
 }
