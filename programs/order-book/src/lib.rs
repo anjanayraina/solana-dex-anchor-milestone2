@@ -308,8 +308,8 @@ pub mod order_book {
 }
 
 pub fn  _validate_trade_price_X96(_side : bool, _tradePriceX96 : u128,  _acceptableTradePriceX96 : u128) -> Result<()> {
-    if _side && (_tradePriceX96 > _acceptableTradePriceX96) || (!_side && (_tradePriceX96 > _acceptableTradePriceX96) )  {
-        require!(false , MyError::CallerUnauthorized);
+    if _side && (_tradePriceX96 > _acceptableTradePriceX96) || (!_side && (_tradePriceX96 < _acceptableTradePriceX96) )  {
+        require!(false , MyError::InvalidOperation);
     }
 
     return Ok(())

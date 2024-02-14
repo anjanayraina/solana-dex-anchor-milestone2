@@ -6,11 +6,13 @@ skip-lint = false
 
 [programs.localnet]
 liqidator = "7EbEtVWNkof8HCnwTKyV8nxm3XzpPChkgD7Asj8P4Rzt"
+liquidity_position_util = "XNiBJSgxaaUkYfX8outPevtBcmao6LV1UrTQiyJ2YJs"
 order-book = "HeMJbjyq4hDeEykL6vEfs3x4jKrQBiXEkZ3yYp64KmvP"
 position-router = "5dqPayZ7oyCMtEsZjSJyPW3sPHm36572Pg8SreDwMf3e"
 price_utils = "3zdpR6aw81LKw7GQpDboSMU9e4aaB3MC6KoUr4kBSWQT"
 router = "8HDnuc7AGaKUNCtSwiqb5H8wKsfjMUW7WpgZgS17VYAT"
 solana_dex_anchor = "FQExbwU6c7DTUmMSmvHhiBw7zHiVWhEr1VR5zhHWbzCi"
+util = "HCPtxSR4y8BUCeVZkFn8XGj73THg39uEmHf5h7hoaTST"
 
 [registry]
 url = "https://api.apr.dev"
