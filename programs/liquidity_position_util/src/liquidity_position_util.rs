@@ -2,21 +2,91 @@ use anchor_lang::prelude::*;
 
 
 
+pub enum Rounding {
+    Up,
+    Down,
+}
+
+/// Returns the maximum of two values.
+pub fn max(a: u128, b: u128) -> u128 {
+    std::cmp::max(a, b)
+}
+
+/// Returns the minimum of two values.
+pub fn min(a: u128, b: u128) -> u128 {
+    std::cmp::min(a, b)
+}
+
+/// Calculates `a / b` with rounding up.
+pub fn ceil_div(a: u128, b: u128) -> u128 {
+    if b == 0 {
+        panic!("Division by zero");
+    }
+
+    if a == 0 {
+        0
+    } else {
+        (a - 1) / b + 1
+    }
+}
+
+/// Calculates `x * y / denominator` with rounding down.
+pub fn mul_div(x: u128, y: u128, denominator: u128) -> u128 {
+    x.checked_mul(y).expect("Multiplication overflow")
+     .checked_div(denominator).expect("Division overflow")
+}
+
+/// Calculates `x * y / denominator` with rounding up.
+pub fn mul_div_up(x: u128, y: u128, denominator: u128) -> u128 {
+    if denominator == 0 {
+        panic!("Division by zero");
+    }
+
+    x.checked_mul(y).expect("Multiplication overflow")
+     .checked_add(denominator - 1) // Add the denominator - 1 before division for rounding up
+     .expect("Addition overflow")
+     .checked_div(denominator).expect("Division overflow")
+}
+
+/// Calculates `x * y / denominator` with specific rounding.
+pub fn mul_div_rounding(x: u128, y: u128, denominator: u128, rounding: Rounding) -> u128 {
+    match rounding {
+        Rounding::Up => mul_div_up(x, y, denominator),
+        Rounding::Down => mul_div(x, y, denominator),
+    }
+}
+
+/// Calculates `x * y / denominator` with both rounding down and up.
+pub fn mul_div2(x: u128, y: u128, denominator: u128) -> (u128, u128) {
+    let result = mul_div(x, y, denominator);
+    let result_up = if x.checked_mul(y).expect("Multiplication overflow")
+                     .checked_rem(denominator).expect("Remainder calculation overflow") > 0 {
+        result + 1
+    } else {
+        result
+    };
+
+    (result, result_up)
+}
+
+
 
     pub fn update_price_state(ctx: Context<UpdatePriceState>) -> Result<()> {
         // Function logic goes here
         Ok(())
     }
 
-    pub fn increase_liquidity_position(state : &mut State , market_congif :&mut MarketConfig , parameter : &mut IncreaseLiquidityPositionContext , index : usize) -> (u128) {
+    pub fn increase_liquidity_position(state : &mut State , market_congif :&mut MarketConfig , parameter : &mut IncreaseLiquidityPositionContext , index : usize , position_cache : &mut Position ) -> Result<u128> {
         // call using MarketUtil , add after wards 
         let base_config = &mut market_congif.base_config;
         let position_cache = &mut state.liquidity_positions.get(index).unwrap();
         let global_liquidity_positions = &mut state.global_liqudity_position;
         let mut reaized_pnl = 0;
-        if true { //  add this after all the libraries are created 
-            if true{ // check for liquidity delta 0 , if yes then revert 
-                
+        if position_cache.liquidity == 0  { //  add this after all the libraries are created 
+            if parameter.liquidity_delta == 0 { 
+                // check for liquidity delta 0 , if yes then revert 
+                return err!(ErrorCode::LiquidityPositionNotFound);
+                // market util call 
             }
 
         }
@@ -47,7 +117,7 @@ use anchor_lang::prelude::*;
             // Handle the case where index is out of bounds
         }
 
-        return 100; 
+        Ok(margin_after_int)
     }
 
     pub fn decrease_liquidity_position(
@@ -59,7 +129,7 @@ use anchor_lang::prelude::*;
     
         if position.liquidity == 0 {
             // error statement 
-                }
+            }
     
         if position.liquidity < parameter.liquidity_delta {
             // error statement 
@@ -72,7 +142,7 @@ use anchor_lang::prelude::*;
             return (0, 0 ) // Replace with a more specific error
         }
     
-        let liquidity_after = position.liquidity.checked_sub(parameter.liquidity_delta).unwrap(); // Replace with a more specific error if subtraction underflows
+        let liquidity_after = position.liquidity.checked_sub(parameter.liquidity_delta).unwrap(); 
     
         // decrease global liquidity
     
@@ -82,12 +152,12 @@ use anchor_lang::prelude::*;
     
         
     
-        return (position.margin, parameter.margin_delta); // Return updated margin and original margin delta
+        return (position.margin, parameter.margin_delta); 
     }
     
     pub fn decrease_global_liquidity(
-        global_liquidity_position: &mut GlobalLiquidityPosition, // mutable reference is necessary to modify the struct
-        global_position: &GlobalPosition, // immutable reference since we're only reading from this struct
+        global_liquidity_position: &mut GlobalLiquidityPosition, 
+        global_position: &GlobalPosition, 
         liquidity_delta: u128,
     ) -> Result<()> {
         let liquidity_after = global_liquidity_position.liquidity.checked_sub(liquidity_delta).unwrap();
@@ -96,10 +166,79 @@ use anchor_lang::prelude::*;
             
         }
     
-        global_liquidity_position.liquidity = liquidity_after; // modifying the struct, hence &mut is necessary
+        global_liquidity_position.liquidity = liquidity_after; 
     
         Ok(())
     }
+
+    pub fn _decrease_global_liquidity(
+        global_liquidity_position: &mut GlobalLiquidityPosition,
+        global_position: &GlobalPosition,
+        liquidity_delta: u128,
+    ) -> Result<()> {
+        if global_liquidity_position.liquidity < liquidity_delta {
+            return err!(ErrorCode::Underflow);
+        }
+        let liquidity_after = global_liquidity_position.liquidity.checked_sub(liquidity_delta)
+            .ok_or(ErrorCode::Underflow)?;
+        
+        if liquidity_after == 0 && (global_position.long_size | global_position.short_size) > 0 {
+            return err!(ErrorCode::LastLiquidityPositionCannotBeClosed);
+        }
+        
+        global_liquidity_position.liquidity = liquidity_after;
+        
+        Ok(())
+    }
+
+    pub fn validate_liquidity_position_risk_rate(
+        base_cfg: &MarketBaseConfig,
+        margin: i128,
+        liquidity: u128,
+        liquidatable_position: bool,
+    ) -> Result<()> {
+        let maintenance_margin = ((liquidity as u128)
+            .checked_mul(base_cfg.liquidation_fee_rate_per_liquidity_position as u128).unwrap()
+            / 10_000)  //  add the actual bp from constants when it gets added 
+            .checked_add(base_cfg.liquidation_execution_fee as u128).unwrap();
+        
+        if !liquidatable_position {
+            if margin < 0 || (maintenance_margin as i128) >= margin {
+                return err!(ErrorCode::RiskRateTooHigh);
+            }
+        } else {
+            if margin >= 0 && (maintenance_margin as i128) < margin {
+                return err!(ErrorCode::RiskRateTooLow);
+            }
+        }
+    
+        Ok(())
+    }
+
+    pub fn calculate_realized_pnl(
+        global_liquidity_position: &GlobalLiquidityPosition,
+        position_cache: &LiquidityPosition,
+    ) -> Result<i128> {
+        let unrealized_pnl_growth_delta_x64 = global_liquidity_position.entry_unreaized_pnl_growth;
+            - position_cache.entry_unrealized_pnl_growth_x64;
+    
+        let realized_pnl = if unrealized_pnl_growth_delta_x64 >= 0 {
+            mul_div(
+                unrealized_pnl_growth_delta_x64 as u128,
+                position_cache.liquidity as u128,
+                100, // change it to q64 when constants are added 
+            ) as i128
+        } else {
+            -(mul_div_up(
+                unrealized_pnl_growth_delta_x64 as u128,
+                position_cache.liquidity as u128,
+                100, // Constants::Q64 equivalent
+            ) as i128)
+        };
+    
+        Ok(realized_pnl)
+    }
+    
 
 
 
@@ -110,22 +249,25 @@ pub struct IncreaseLiquidityPositionContext {
     
 }
 
-// Define your structs here as needed.
-
 pub struct DecreaseLiquidityPositionParameter {
     pub account_index: usize,
     pub margin_delta: u128,
     pub liquidity_delta: u128,
     // Include other parameters as needed
 }
+pub struct LiquidityPosition {
+    pub margin: u128,
+    pub liquidity: u128,
+    pub entry_unrealized_pnl_growth_x64: i128,
+}
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 struct MarketDescriptor {
-    // Define fields according to your Solidity IMarketDescriptor
+   
 }
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 struct PriceFeed {
-    // Define fields according to your Solidity IPriceFeed
+    
 }
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct GlobalLiquidityPosition {
@@ -259,6 +401,13 @@ pub struct GlobalLiquidationFund {
     pub liquidity: u128,
 }
 
+pub struct Position {
+    pub margin: u128,
+    pub size: u128,
+    pub entry_price_x96: u128, 
+    pub entry_funding_rate_growth_x96: i128, 
+}
+
 #[error_code]
 pub enum ErrorCode {
     #[msg("The margin rate is too high.")]
@@ -267,6 +416,8 @@ pub enum ErrorCode {
     MarginRateTooLow,
     #[msg("Overflow occurred.")]
     Overflow,
+    #[msg("Underflow occurred.")]
+    Underflow,
     #[msg("Insufficient global liquidity.")]
     InsufficientGlobalLiquidity,
     #[msg("Size Excedded")] 
@@ -277,7 +428,14 @@ pub enum ErrorCode {
     InsufficientSizeToDecrease , 
     #[msg("InsufficientMargin")]
     InsufficientMargin,
-
+    #[msg("LiquidityPositionNotFound")]
+    LiquidityPositionNotFound,
+    #[msg("LastLiquidityPositionCannotBeClosed")] 
+    LastLiquidityPositionCannotBeClosed,
+    #[msg("RiskRateTooHigh")] 
+    RiskRateTooHigh,
+    #[msg("RiskRateTooLow")] 
+    RiskRateTooLow,
 
 
 }

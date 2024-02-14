@@ -515,10 +515,7 @@ pub fn liquidate_position(
         parameter.trade_price_x96,
     );
 
-    // Distribute the fee
-    // global_liquidity_position: &mut GlobalLiquidityPosition,
-    // fee_rate_cfg: &MarketFeeRateConfig,
-    // parameter: &DistributeFeeParameter,
+
     let fee_param = &DistributeFeeParameter {
         market: parameter.market,
         account: parameter.account,
@@ -584,9 +581,7 @@ pub fn calculate_liquidation_price_x96(
         }
     }
 
-    // Placeholder logic to adjust the funding fee based on previous global funding rate
-    // This should involve calculating a new funding fee based on the difference in funding rates
-    // and the position size, similar to the Solidity logic
+
 
     adjusted_funding_fee = calculate_funding_fee(
         choose_previous_global_funding_rate_growth_x96(global_funding_rate, is_long),
@@ -681,8 +676,8 @@ pub fn calculate_unrealized_pnl(
     entry_price_x96: u128,
     price_x96: u128,
 ) -> i128 {
-    let bp :u128= 100; // add when adding constanst 
-    let q96   = 100 ; // change this too 
+    let bp :u128= 100; 
+    let q96   = 100 ;
     if is_long {
         if entry_price_x96 > price_x96 {
             -(size.checked_mul(entry_price_x96 - price_x96).unwrap().checked_div(q96).unwrap() as i128)
@@ -766,15 +761,15 @@ pub fn split_fee(trading_fee: u128, fee_rate: u32) -> u128 {
     (trading_fee * fee_rate as u128) / basis_points_divisor
 }
 
-/// Chooses the previous global funding rate growth based on the position side.
+
 pub fn choose_previous_global_funding_rate_growth_x96(
     previous_global_funding_rate: &GlobalPosition,
     is_long: bool,
 ) -> i128 { // Assuming simplified usage of i128 to represent fixed-point numbers
     if is_long {
-        previous_global_funding_rate.long_funding_rate_growth_x96
+        return previous_global_funding_rate.long_funding_rate_growth_x96
     } else {
-        previous_global_funding_rate.short_funding_rate_growth_x96
+        return previous_global_funding_rate.short_funding_rate_growth_x96
     }
 }
 
@@ -847,7 +842,6 @@ pub fn validate_increase_size(
 
     Ok(size_after)
 }
-
 
 
 fn build_trading_fee_state(fee_rate_cfg: &MarketFeeRateConfig, account: Pubkey , referral_token : u128 , referral_parent_token : u128) -> TradingFeeState {
