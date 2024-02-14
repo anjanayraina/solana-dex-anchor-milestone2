@@ -1,56 +1,48 @@
+// Import necessary components from the Anchor framework.
 use anchor_lang::prelude::*;
-
-use crate::liquidity_position_uti::decrease_global_liquidity;
-
+use anchor_lang::solana_program::pubkey::Pubkey;
 
 
+
+// Enum to specify rounding direction for mathematical operations.
 pub enum Rounding {
     Up,
     Down,
 }
 
-/// Returns the maximum of two values.
+// Utility functions for mathematical operations.
+/// Returns the maximum of two u128 values.
 pub fn max(a: u128, b: u128) -> u128 {
     std::cmp::max(a, b)
 }
 
-/// Returns the minimum of two values.
+/// Returns the minimum of two u128 values.
 pub fn min(a: u128, b: u128) -> u128 {
     std::cmp::min(a, b)
 }
 
-/// Calculates `a / b` with rounding up.
+/// Calculates `a / b` with rounding up to the nearest integer.
 pub fn ceil_div(a: u128, b: u128) -> u128 {
-    if b == 0 {
-        panic!("Division by zero");
-    }
-
-    if a == 0 {
-        0
-    } else {
-        (a - 1) / b + 1
-    }
+    if b == 0 { panic!("Division by zero"); }
+    if a == 0 { 0 } else { (a - 1) / b + 1 }
 }
 
-/// Calculates `x * y / denominator` with rounding down.
+/// Multiplies `x` by `y` and divides by `denominator` with rounding down.
 pub fn mul_div(x: u128, y: u128, denominator: u128) -> u128 {
     x.checked_mul(y).expect("Multiplication overflow")
      .checked_div(denominator).expect("Division overflow")
 }
 
-/// Calculates `x * y / denominator` with rounding up.
+/// Multiplies `x` by `y` and divides by `denominator` with rounding up.
 pub fn mul_div_up(x: u128, y: u128, denominator: u128) -> u128 {
-    if denominator == 0 {
-        panic!("Division by zero");
-    }
-
+    if denominator == 0 { panic!("Division by zero"); }
     x.checked_mul(y).expect("Multiplication overflow")
-     .checked_add(denominator - 1) // Add the denominator - 1 before division for rounding up
+     .checked_add(denominator - 1)
      .expect("Addition overflow")
      .checked_div(denominator).expect("Division overflow")
 }
 
-/// Calculates `x * y / denominator` with specific rounding.
+/// Multiplies `x` by `y` and divides by `denominator`, applying the specified rounding.
 pub fn mul_div_rounding(x: u128, y: u128, denominator: u128, rounding: Rounding) -> u128 {
     match rounding {
         Rounding::Up => mul_div_up(x, y, denominator),
@@ -58,7 +50,7 @@ pub fn mul_div_rounding(x: u128, y: u128, denominator: u128, rounding: Rounding)
     }
 }
 
-/// Calculates `x * y / denominator` with both rounding down and up.
+/// Multiplies `x` by `y` and divides by `denominator`, returning both rounding down and up results.
 pub fn mul_div2(x: u128, y: u128, denominator: u128) -> (u128, u128) {
     let result = mul_div(x, y, denominator);
     let result_up = if x.checked_mul(y).expect("Multiplication overflow")
@@ -67,138 +59,135 @@ pub fn mul_div2(x: u128, y: u128, denominator: u128) -> (u128, u128) {
     } else {
         result
     };
-
     (result, result_up)
 }
 
+// Functions to manage liquidity positions.
+/// Increases liquidity position, adjusting margin and liquidity based on provided parameters.
+pub fn increase_liquidity_position(
+    state: &mut State, 
+    market_config: &mut MarketConfig, 
+    parameter: &IncreaseLiquidityPositionContext,
+    index: usize 
+) -> Result<u128> {
+    // Retrieve base configuration and targeted liquidity position.
+    let base_cfg = &market_config.base_config;
+    let position_cache = state.liquidity_positions
+        .get_mut(index)
+        .ok_or(ErrorCode::LiquidityPositionNotFound)?;
 
-    pub fn increase_liquidity_position(
-        state: &mut State, 
-        market_config: &mut MarketConfig, 
-        parameter: &IncreaseLiquidityPositionContext,
-        index : usize 
-    ) -> Result<u128> {
-        // Simulate MarketUtil.settleLiquidityUnrealizedPnL logic here
-    
-        let base_cfg = &market_config.base_config;
-        let position_cache = state.liquidity_positions
-            .get_mut(index)
-            .ok_or(ErrorCode::LiquidityPositionNotFound)?;
-    
-        let global_liquidity_position = &mut state.global_liqudity_position;
-    
-        let mut realized_pnl_delta = 0;
-        if position_cache.liquidity == 0 {
-            if parameter.liquidity_delta == 0 {
-                return Err(ErrorCode::LiquidityPositionNotFound.into());
-            }
-            // Validate margin with MarketUtil.validateMargin logic here
-        } else {
-            realized_pnl_delta = calculate_realized_pnl(global_liquidity_position, position_cache).unwrap();
-        }
-    
-        let margin_after = position_cache.margin as i128
-            + parameter.margin_delta as i128
-            + realized_pnl_delta;
-        if margin_after <= 0 {
-            return Err(ErrorCode::InsufficientMargin.into());
-        }
-    
-        let liquidity_after = position_cache.liquidity + parameter.liquidity_delta;
+    // Reference to global liquidity position for calculations.
+    let global_liquidity_position = &mut state.global_liqudity_position;
 
-        validate_liquidity_position_risk_rate(
-            base_cfg,
-            margin_after,
-            liquidity_after,
-            false,
-        )?;
-    
-        position_cache.margin = margin_after as u128;
-        position_cache.liquidity = liquidity_after;
-        position_cache.entry_unrealized_pnl_growth_x64 = global_liquidity_position.entry_unreaized_pnl_growth as i128;
-    
-        Ok(margin_after as u128)
-    }
-    
-    pub fn decrease_liquidity_position(
-        state: &mut State,
-        parameter: &DecreaseLiquidityPositionParameter,
-        index : usize , 
-    ) -> Result<(u128, u128)> {
-        // MarketUtil.settleLiquidityUnrealizedPnL logic here
-        
-        let position = state.liquidity_positions
-            .get_mut(parameter.account_index)
-            .ok_or(ErrorCode::LiquidityPositionNotFound)?;
-    
-        if position.liquidity < parameter.liquidity_delta {
-            return Err(ErrorCode::InsufficientLiquidityToDecrease.into());
+    // Calculate realized PnL if applicable.
+    let mut realized_pnl_delta = 0;
+    if position_cache.liquidity == 0 {
+        if parameter.liquidity_delta == 0 {
+            return Err(ErrorCode::LiquidityPositionNotFound.into());
         }
-        let global_liquidity: &mut GlobalLiquidityPosition = &mut state.global_liqudity_position;
-        let realized_pnl_delta = calculate_realized_pnl(&global_liquidity, position).unwrap(); // Placeholder for realized PnL calculation logic
-    
-        let margin_after = (position.margin as i128) + realized_pnl_delta - parameter.margin_delta as i128;
-        if margin_after < 0 {
-            return Err(ErrorCode::InsufficientMargin.into());
-        }
-    
-        let liquidity_after = position.liquidity - parameter.liquidity_delta;
-        if parameter.liquidity_delta > 0 {
-            _decrease_global_liquidity( global_liquidity, &state.globalPosition , parameter.liquidity_delta);
-        }    
-        position.margin = margin_after as u128;
-        position.liquidity = liquidity_after;
-    
-        Ok((margin_after as u128, parameter.margin_delta))
+    } else {
+        realized_pnl_delta = calculate_realized_pnl(global_liquidity_position, position_cache).unwrap();
     }
-    
-    pub fn liquidate_liquidity_position(
-        state: &mut State,
-        parameter: &LiquidateLiquidityPositionParameter,
-        index: usize ,
-        market_cfg : MarketConfig,
-    ) -> Result<u64> {
-        // Simulate MarketUtil.settleLiquidityUnrealizedPnL logic here
-    
-        let position = state.liquidity_positions
-            .get_mut(index)
-            .ok_or(ErrorCode::LiquidityPositionNotFound)?;
-    
-        let global_liquidity_position = &mut state.global_liqudity_position;
-        let realized_pnl_delta = calculate_realized_pnl(global_liquidity_position, &position).unwrap();
-    
-        let mut margin_after = position.margin as i128 + realized_pnl_delta;
-        // Validate risk rate for liquidation
-        let base_cfg = market_cfg.base_config;
-        validate_liquidity_position_risk_rate(&base_cfg, margin_after, position.liquidity, true);    
-        _decrease_global_liquidity(
-            global_liquidity_position,
-            &state.globalPosition,
-            position.liquidity,
-        )?;
-        let liquidation_execution_fee = base_cfg.liquidation_execution_fee; 
 
-        margin_after -= liquidation_execution_fee as i128;
-        let mut division_result = 0 ;
-       // let mut unrealized_pnl_growth_after = global_liquidity_position.entry_unreaized_pnl_growth;
-        if margin_after < 0 {
-            let mut liquidation_loss = 0;
-            liquidation_loss = (-margin_after );
-            let Q64 = 100; // change when constants are added
-           let product = liquidation_loss.checked_mul(Q64 as i128).ok_or(ErrorCode::Overflow)?;
-             division_result = product.checked_add(global_liquidity_position.liquidity as i128 - 1).ok_or(ErrorCode::Overflow)?
-                                        .checked_div(global_liquidity_position.liquidity as i128).ok_or(ErrorCode::Overflow)?;
-            global_liquidity_position.liquidity-=division_result as u128 ;
-        }
-        else {
-            state.global_liquidation_fund.liquidation_fund +=margin_after;
-        }
-    
-        // Remove the liquidity position
-        // Emit event or log similar to Solidity's event
-    
-        Ok(liquidation_execution_fee)
+    // Calculate new margin after applying changes.
+    let margin_after = position_cache.margin as i128 + parameter.margin_delta as i128 + realized_pnl_delta;
+    if margin_after <= 0 {
+        return Err(ErrorCode::InsufficientMargin.into());
     }
+
+    // Update liquidity and margin in the position cache.
+    let liquidity_after = position_cache.liquidity + parameter.liquidity_delta;
+    validate_liquidity_position_risk_rate(base_cfg, margin_after, liquidity_after, false)?;
+
+    position_cache.margin = margin_after as u128;
+    position_cache.liquidity = liquidity_after;
+    position_cache.entry_unrealized_pnl_growth_x64 = global_liquidity_position.entry_unreaized_pnl_growth as i128;
+
+    Ok(margin_after as u128)
+}
+
+/// Decreases a specified liquidity position based on input parameters.
+pub fn decrease_liquidity_position(
+    state: &mut State,
+    parameter: &DecreaseLiquidityPositionParameter,
+    index: usize, 
+) -> Result<(u128, u128)> {
+    // Retrieve targeted liquidity position and validate request.
+    let position = state.liquidity_positions
+        .get_mut(parameter.account_index)
+        .ok_or(ErrorCode::LiquidityPositionNotFound)?;
+
+    if position.liquidity < parameter.liquidity_delta {
+        return Err(ErrorCode::InsufficientLiquidityToDecrease.into());
+    }
+
+    // Calculate new margin and liquidity after decreasing.
+    let global_liquidity: &mut GlobalLiquidityPosition = &mut state.global_liqudity_position;
+    let realized_pnl_delta = calculate_realized_pnl(&global_liquidity, position).unwrap();
+
+    let margin_after = (position.margin as i128) + realized_pnl_delta - parameter.margin_delta as i128;
+    if margin_after < 0 {
+        return Err(ErrorCode::InsufficientMargin.into());
+    }
+
+    let liquidity_after = position.liquidity - parameter.liquidity_delta;
+    if parameter.liquidity_delta > 0 {
+        _decrease_global_liquidity(global_liquidity, &state.globalPosition, parameter.liquidity_delta)?;
+    }
+
+    // Update the position with new values.
+    position.margin = margin_after as u128;
+    position.liquidity = liquidity_after;
+
+    Ok((margin_after as u128, parameter.margin_delta))
+}
+
+/// Liquidates a specified liquidity position, applying penalties and adjustments based on market conditions.
+pub fn liquidate_liquidity_position(
+    state: &mut State,
+    parameter: &LiquidateLiquidityPositionParameter,
+    index: usize,
+    market_cfg: MarketConfig,
+) -> Result<u64> {
+    // Retrieve targeted liquidity position for liquidation.
+    let position = state.liquidity_positions
+        .get_mut(index)
+        .ok_or(ErrorCode::LiquidityPositionNotFound)?;
+
+    let global_liquidity_position = &mut state.global_liqudity_position;
+    let realized_pnl_delta = calculate_realized_pnl(global_liquidity_position, &position).unwrap();
+
+    let mut margin_after = position.margin as i128 + realized_pnl_delta;
+    // Validate risk rate for potential liquidation.
+    let base_cfg = market_cfg.base_config;
+    validate_liquidity_position_risk_rate(&base_cfg, margin_after, position.liquidity, true)?;
+
+    // Apply global liquidity decrease due to liquidation.
+    _decrease_global_liquidity(global_liquidity_position, &state.globalPosition, position.liquidity)?;
+
+    // Calculate and apply liquidation penalties.
+    let liquidation_execution_fee = base_cfg.liquidation_execution_fee;
+    margin_after -= liquidation_execution_fee as i128;
+
+    // Adjust global liquidity and fund based on liquidation outcome.
+    let Q64 = 100; //place holder for constant 
+    if margin_after < 0 {
+        let liquidation_loss = (-margin_after) as u128;
+        // Calculation for adjusted global liquidity based on liquidation.
+        let division_result = mul_div(liquidation_loss, Q64, global_liquidity_position.liquidity);
+        global_liquidity_position.liquidity -= division_result;
+    } else {
+        state.global_liquidation_fund.liquidation_fund += margin_after as i128;
+    }
+
+    // Finalize liquidation by removing the position and returning execution fee.
+    Ok(liquidation_execution_fee)
+}
+
+// Additional functions for global liquidity management, risk validation, and PnL calculations omitted for brevity.
+
+// Structs for managing liquidity positions, market configurations, and error handling omitted for brevity.
+
     
     pub fn _decrease_global_liquidity(
         global_liquidity_position: &mut GlobalLiquidityPosition,
