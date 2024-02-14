@@ -103,9 +103,7 @@ pub fn mul_div2(x: u128, y: u128, denominator: u128) -> (u128, u128) {
         }
     
         let liquidity_after = position_cache.liquidity + parameter.liquidity_delta;
-        // Additional validation can go here, similar to leverage validation in Solidity
-    
-        // Validate risk rate
+
         validate_liquidity_position_risk_rate(
             base_cfg,
             margin_after,
@@ -115,64 +113,74 @@ pub fn mul_div2(x: u128, y: u128, denominator: u128) -> (u128, u128) {
     
         position_cache.margin = margin_after as u128;
         position_cache.liquidity = liquidity_after;
-        // Assuming unrealized PnL growth is tracked similarly to Solidity
         position_cache.entry_unrealized_pnl_growth_x64 = global_liquidity_position.entry_unreaized_pnl_growth as i128;
     
         Ok(margin_after as u128)
     }
     
-
     pub fn decrease_liquidity_position(
         state: &mut State,
-        market_config: &MarketConfig,
         parameter: &DecreaseLiquidityPositionParameter,
-    ) -> (u128, u128) {
-        let position = state.liquidity_positions.get_mut(parameter.account_index).unwrap(); // Error if index is out of bounds
+    ) -> Result<(u128, u128)> {
+        // Simulate MarketUtil.settleLiquidityUnrealizedPnL logic here
     
-        if position.liquidity == 0 {
-            // error statement 
-            }
+        let position = state.liquidity_positions
+            .get_mut(parameter.account_index)
+            .ok_or(ErrorCode::LiquidityPositionNotFound)?;
     
         if position.liquidity < parameter.liquidity_delta {
-            // error statement 
+            return Err(ErrorCode::InsufficientLiquidityToDecrease.into());
         }
     
         let realized_pnl_delta = 0; // Placeholder for realized PnL calculation logic
     
-        let margin_after_int = position.margin as i128 + parameter.margin_delta as i128 + realized_pnl_delta;
-        if margin_after_int < 0 {
-            return (0, 0 ) // Replace with a more specific error
+        let margin_after = position.margin as i128 + realized_pnl_delta - parameter.margin_delta as i128;
+        if margin_after < 0 {
+            return Err(ErrorCode::InsufficientMargin.into());
         }
     
-        let liquidity_after = position.liquidity.checked_sub(parameter.liquidity_delta).unwrap(); 
+        let liquidity_after = position.liquidity - parameter.liquidity_delta;
+        // Decrease global liquidity here
     
-        // decrease global liquidity
-    
-        // Apply changes to the position
-        position.margin = margin_after_int as u128;
+        position.margin = margin_after as u128;
         position.liquidity = liquidity_after;
     
-        
-    
-        return (position.margin, parameter.margin_delta); 
+        Ok((margin_after as u128, parameter.margin_delta))
     }
     
-    pub fn decrease_global_liquidity(
-        global_liquidity_position: &mut GlobalLiquidityPosition, 
-        global_position: &GlobalPosition, 
-        liquidity_delta: u128,
-    ) -> Result<()> {
-        let liquidity_after = global_liquidity_position.liquidity.checked_sub(liquidity_delta).unwrap();
+    pub fn liquidate_liquidity_position(
+        state: &mut State,
+        parameter: &LiquidateLiquidityPositionParameter,
+        index: usize 
+    ) -> Result<u64> {
+        // Simulate MarketUtil.settleLiquidityUnrealizedPnL logic here
     
-        if liquidity_after == 0 && (global_position.long_size | global_position.short_size) > 0 {
-            
-        }
+        let position = state.liquidity_positions
+            .get_mut(index)
+            .ok_or(ErrorCode::LiquidityPositionNotFound)?;
     
-        global_liquidity_position.liquidity = liquidity_after; 
+        let global_liquidity_position = &mut state.global_liqudity_position;
+        let realized_pnl_delta = 0; // Placeholder for realized PnL calculation logic
     
-        Ok(())
+        let margin_after = position.margin as i128 + realized_pnl_delta;
+        // Validate risk rate for liquidation
+    
+        // Decrease global liquidity position
+        _decrease_global_liquidity(
+            global_liquidity_position,
+            &state.globalPosition,
+            position.liquidity,
+        )?;
+    
+        let liquidation_execution_fee = 0; // Placeholder for execution fee logic
+        // Additional logic for handling margin after liquidation
+    
+        // Remove the liquidity position
+        // Emit event or log similar to Solidity's event
+    
+        Ok(liquidation_execution_fee)
     }
-
+    
     pub fn _decrease_global_liquidity(
         global_liquidity_position: &mut GlobalLiquidityPosition,
         global_position: &GlobalPosition,
@@ -367,6 +375,7 @@ pub struct State {
     pub protocol_fee: u128,
     pub liquidity_positions : Vec<LiquidityPosition> , 
     pub global_liqudity_position : GlobalLiquidityPosition,
+    pub globalPosition : GlobalPosition , 
     // Referral fees, liquidity positions, positions, and liquidation fund positions
     // would be managed through PDAs or alternative data structures.
 }
@@ -411,6 +420,13 @@ pub struct Position {
     pub entry_funding_rate_growth_x96: i128, 
 }
 
+pub struct  LiquidateLiquidityPositionParameter {
+     market : Pubkey,
+    address : Pubkey,
+    priceFeed : Pubkey, 
+    feeReceiver : Pubkey ,
+}
+
 #[error_code]
 pub enum ErrorCode {
     #[msg("The margin rate is too high.")]
@@ -439,6 +455,8 @@ pub enum ErrorCode {
     RiskRateTooHigh,
     #[msg("RiskRateTooLow")] 
     RiskRateTooLow,
+    #[msg("InsufficientLiquidityToDecrease")] 
+    InsufficientLiquidityToDecrease,
 
 
 }
