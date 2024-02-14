@@ -155,7 +155,8 @@ pub fn mul_div2(x: u128, y: u128, denominator: u128) -> (u128, u128) {
     pub fn liquidate_liquidity_position(
         state: &mut State,
         parameter: &LiquidateLiquidityPositionParameter,
-        index: usize 
+        index: usize ,
+        market_cfg : MarketConfig,
     ) -> Result<u64> {
         // Simulate MarketUtil.settleLiquidityUnrealizedPnL logic here
     
@@ -164,20 +165,34 @@ pub fn mul_div2(x: u128, y: u128, denominator: u128) -> (u128, u128) {
             .ok_or(ErrorCode::LiquidityPositionNotFound)?;
     
         let global_liquidity_position = &mut state.global_liqudity_position;
-        let realized_pnl_delta = 0; // Placeholder for realized PnL calculation logic
+        let realized_pnl_delta = calculate_realized_pnl(global_liquidity_position, &position).unwrap();
     
-        let margin_after = position.margin as i128 + realized_pnl_delta;
+        let mut margin_after = position.margin as i128 + realized_pnl_delta;
         // Validate risk rate for liquidation
-    
-        // Decrease global liquidity position
+        let base_cfg = market_cfg.base_config;
+        validate_liquidity_position_risk_rate(&base_cfg, margin_after, position.liquidity, true);    
         _decrease_global_liquidity(
             global_liquidity_position,
             &state.globalPosition,
             position.liquidity,
         )?;
-    
-        let liquidation_execution_fee = 0; // Placeholder for execution fee logic
-        // Additional logic for handling margin after liquidation
+        let liquidation_execution_fee = base_cfg.liquidation_execution_fee; 
+
+        margin_after -= liquidation_execution_fee as i128;
+        let mut division_result = 0 ;
+       // let mut unrealized_pnl_growth_after = global_liquidity_position.entry_unreaized_pnl_growth;
+        if margin_after < 0 {
+            let mut liquidation_loss = 0;
+            liquidation_loss = (-margin_after );
+            let Q64 = 100; // change when constants are added
+           let product = liquidation_loss.checked_mul(Q64 as i128).ok_or(ErrorCode::Overflow)?;
+             division_result = product.checked_add(global_liquidity_position.liquidity as i128 - 1).ok_or(ErrorCode::Overflow)?
+                                        .checked_div(global_liquidity_position.liquidity as i128).ok_or(ErrorCode::Overflow)?;
+            global_liquidity_position.liquidity-=division_result as u128 ;
+        }
+        else {
+            state.global_liquidation_fund.liquidation_fund +=margin_after;
+        }
     
         // Remove the liquidity position
         // Emit event or log similar to Solidity's event
@@ -380,6 +395,7 @@ pub struct State {
     pub liquidity_positions : Vec<LiquidityPosition> , 
     pub global_liqudity_position : GlobalLiquidityPosition,
     pub globalPosition : GlobalPosition , 
+    pub global_liquidation_fund : GlobalLiquidationFund,
     // Referral fees, liquidity positions, positions, and liquidation fund positions
     // would be managed through PDAs or alternative data structures.
 }
@@ -423,6 +439,8 @@ pub struct Position {
     pub entry_price_x96: u128, 
     pub entry_funding_rate_growth_x96: i128, 
 }
+
+
 
 pub struct  LiquidateLiquidityPositionParameter {
      market : Pubkey,
