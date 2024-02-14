@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 
+use crate::liquidity_position_uti::decrease_global_liquidity;
+
 
 
 pub enum Rounding {
@@ -92,7 +94,7 @@ pub fn mul_div2(x: u128, y: u128, denominator: u128) -> (u128, u128) {
             }
             // Validate margin with MarketUtil.validateMargin logic here
         } else {
-            realized_pnl_delta = calculate_realized_pnl(global_liquidity_position, position_cache).unwrap();// Calculate realized PnL with a function similar to _calculateRealizedPnL in Solidity
+            realized_pnl_delta = calculate_realized_pnl(global_liquidity_position, position_cache).unwrap();
         }
     
         let margin_after = position_cache.margin as i128
@@ -121,9 +123,10 @@ pub fn mul_div2(x: u128, y: u128, denominator: u128) -> (u128, u128) {
     pub fn decrease_liquidity_position(
         state: &mut State,
         parameter: &DecreaseLiquidityPositionParameter,
+        index : usize , 
     ) -> Result<(u128, u128)> {
-        // Simulate MarketUtil.settleLiquidityUnrealizedPnL logic here
-    
+        // MarketUtil.settleLiquidityUnrealizedPnL logic here
+        
         let position = state.liquidity_positions
             .get_mut(parameter.account_index)
             .ok_or(ErrorCode::LiquidityPositionNotFound)?;
@@ -131,17 +134,18 @@ pub fn mul_div2(x: u128, y: u128, denominator: u128) -> (u128, u128) {
         if position.liquidity < parameter.liquidity_delta {
             return Err(ErrorCode::InsufficientLiquidityToDecrease.into());
         }
+        let global_liquidity: &mut GlobalLiquidityPosition = &mut state.global_liqudity_position;
+        let realized_pnl_delta = calculate_realized_pnl(&global_liquidity, position).unwrap(); // Placeholder for realized PnL calculation logic
     
-        let realized_pnl_delta = 0; // Placeholder for realized PnL calculation logic
-    
-        let margin_after = position.margin as i128 + realized_pnl_delta - parameter.margin_delta as i128;
+        let margin_after = (position.margin as i128) + realized_pnl_delta - parameter.margin_delta as i128;
         if margin_after < 0 {
             return Err(ErrorCode::InsufficientMargin.into());
         }
     
         let liquidity_after = position.liquidity - parameter.liquidity_delta;
-        // Decrease global liquidity here
-    
+        if parameter.liquidity_delta > 0 {
+            _decrease_global_liquidity( global_liquidity, &state.globalPosition , parameter.liquidity_delta);
+        }    
         position.margin = margin_after as u128;
         position.liquidity = liquidity_after;
     
